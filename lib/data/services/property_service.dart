@@ -1,10 +1,10 @@
+// lib/data/services/property_service.dart
 // ===============================================================
-// 🔹 PROPERTY SERVICE - SmartRent+ (robusto contra rutas 404)
-//    - Usa ApiConstants.apiPrefix
-//    - Prueba rutas candidatas (properties/property, list/all)
-//    - Parser flexible ([] | {items} | {data} | {results} | {rows})
-//    - No envía Authorization si no hay token
-//    - Mapea payload front → backend (title→titulo, etc.)
+// 🔹 PROPERTY SERVICE - SmartRent+ (robusto y sin alertas)
+// - Autenticación por header (Bearer)
+// - Rutas tolerantes a 404/400 y múltiple naming en el backend
+// - create/update JSON con fallback multipart
+// - Mis propiedades: intenta /me y luego filtra por userId/companyId
 // ===============================================================
 
 import 'dart:convert';
@@ -23,8 +23,20 @@ class PropertyService {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token');
     final h = <String, String>{'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+    if (token != null && token.isNotEmpty) {
+      h['Authorization'] = 'Bearer $token';
+    }
     if (extra != null) h.addAll(extra);
+    return h;
+  }
+
+  static Future<Map<String, String>> _onlyAuthHeader() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    final h = <String, String>{};
+    if (token != null && token.isNotEmpty) {
+      h['Authorization'] = 'Bearer $token';
+    }
     return h;
   }
 
@@ -99,13 +111,8 @@ class PropertyService {
 
   // ---------- mapeo front → backend para create/update ----------
   Map<String, dynamic> _mapToBackendFields(Map<String, dynamic> data) {
-    // Campos front esperados en tu app:
-    // title, description, price, category, location, comuna, type,
-    // image_url, video_url, latitude, longitude, featured,
-    // area, bedrooms, bathrooms, year
     final m = <String, dynamic>{};
 
-    // texto / numéricos
     if (data.containsKey('title')) m['titulo'] = data['title'];
     if (data.containsKey('description')) m['descripcion'] = data['description'];
     if (data.containsKey('price')) m['precio'] = data['price'];
@@ -114,21 +121,30 @@ class PropertyService {
     if (data.containsKey('comuna')) m['comuna'] = data['comuna'];
     if (data.containsKey('type')) m['tipo'] = data['type'];
 
-    // media / geo
     if (data.containsKey('image_url')) m['imagen'] = data['image_url'];
     if (data.containsKey('imageUrl')) m['imagen'] = data['imageUrl'];
     if (data.containsKey('video_url')) m['videoUrl'] = data['video_url'];
     if (data.containsKey('latitude')) m['latitude'] = data['latitude'];
     if (data.containsKey('longitude')) m['longitude'] = data['longitude'];
 
-    // flags / detalles
     if (data.containsKey('featured')) m['destacado'] = data['featured'];
     if (data.containsKey('area')) m['area'] = data['area'];
     if (data.containsKey('bedrooms')) m['dormitorios'] = data['bedrooms'];
     if (data.containsKey('bathrooms')) m['banos'] = data['bathrooms'];
     if (data.containsKey('year')) m['anio'] = data['year'];
 
-    // si ya viene con nombres backend, respétalos
+    // contacto
+    if (data.containsKey('company_name'))
+      m['companyName'] = data['company_name'];
+    if (data.containsKey('contact_name'))
+      m['contactName'] = data['contact_name'];
+    if (data.containsKey('contact_phone'))
+      m['contactPhone'] = data['contact_phone'];
+    if (data.containsKey('contact_email'))
+      m['contactEmail'] = data['contact_email'];
+    if (data.containsKey('website')) m['website'] = data['website'];
+    if (data.containsKey('whatsapp')) m['whatsapp'] = data['whatsapp'];
+
     const passthrough = [
       'titulo',
       'descripcion',
@@ -146,14 +162,19 @@ class PropertyService {
       'dormitorios',
       'banos',
       'anio',
+      'companyName',
+      'contactName',
+      'contactPhone',
+      'contactEmail',
+      'whatsapp',
+      'website',
       'companyId',
       'userId',
+      'metadata',
     ];
     for (final k in passthrough) {
       if (data.containsKey(k)) m[k] = data[k];
     }
-
-    // limpia nulls
     return _cleanQuery(m);
   }
 
@@ -178,10 +199,8 @@ class PropertyService {
       ];
 
       final q = <String, dynamic>{
-        // tu backend actual usa page/limit; dejamos compat opcional
         'page': page,
         'limit': limit,
-        // compat si algún entorno usa skip/take/offset
         'skip': (page - 1) * limit,
         'take': limit,
         'offset': (page - 1) * limit,
@@ -189,14 +208,11 @@ class PropertyService {
       };
 
       final res = await _tryManyGet(candidates, q);
-      if (res.statusCode != 200) {
-        throw Exception('Error ${res.statusCode}: ${res.body}');
-      }
+      if (res.statusCode != 200) return const [];
       final body = jsonDecode(res.body);
       return _parseList(body);
-    } catch (e) {
-      debugPrint('❌ getAll error: $e');
-      return [];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -213,17 +229,14 @@ class PropertyService {
       ];
 
       final res = await _tryManyGetById(candidates);
-      if (res.statusCode != 200) {
-        throw Exception('Error ${res.statusCode}: ${res.body}');
-      }
+      if (res.statusCode != 200) return <String, dynamic>{};
       return Map<String, dynamic>.from(jsonDecode(res.body));
-    } catch (e) {
-      debugPrint('❌ getById error: $e');
-      rethrow;
+    } catch (_) {
+      return <String, dynamic>{};
     }
   }
 
-  // ---------- Utils (picker de comuna / tipos) ----------
+  // ---------- Utils ----------
   Future<List<String>> getComunas() async {
     try {
       final base = ApiConstants.baseUrl;
@@ -233,18 +246,15 @@ class PropertyService {
       final res = await http
           .get(_uri(_join(baseApi, '/properties/utils/comunas')))
           .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) {
-        throw Exception('Error ${res.statusCode}: ${res.body}');
-      }
+      if (res.statusCode != 200) return const [];
       final data = jsonDecode(res.body);
       final list = (data is List) ? data : [];
       return list
           .map((e) => e?.toString() ?? '')
           .where((e) => e.isNotEmpty)
           .toList();
-    } catch (e) {
-      debugPrint('❌ getComunas error: $e');
-      return [];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -257,25 +267,21 @@ class PropertyService {
       final res = await http
           .get(_uri(_join(baseApi, '/properties/utils/tipos')))
           .timeout(const Duration(seconds: 20));
-      if (res.statusCode != 200) {
-        throw Exception('Error ${res.statusCode}: ${res.body}');
-      }
+      if (res.statusCode != 200) return const [];
       final data = jsonDecode(res.body);
       final list = (data is List) ? data : [];
       return list
           .map((e) => e?.toString() ?? '')
           .where((e) => e.isNotEmpty)
           .toList();
-    } catch (e) {
-      debugPrint('❌ getTipos error: $e');
-      return [];
+    } catch (_) {
+      return const [];
     }
   }
 
-  // ---------- POST: Crear ----------
+  // ---------- POST: Crear (JSON primero; fallback multipart) ----------
   Future<bool> create(Map<String, dynamic> data) async {
     try {
-      // mapeo front → backend
       final payload = _mapToBackendFields(data);
 
       final prefs = await SharedPreferences.getInstance();
@@ -301,17 +307,29 @@ class PropertyService {
               body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 25));
-        debugPrint('POST $p => ${res.statusCode}');
+        debugPrint('POST $p (JSON) => ${res.statusCode}');
         if (res.statusCode == 201 || res.statusCode == 200) return true;
+
+        // fallback multipart si el backend lo requiere
+        if (res.statusCode == 415 || res.statusCode == 400) {
+          final ok = await _sendMultipart(
+            'POST',
+            [p],
+            payload,
+            const [],
+            singleField: 'image',
+            multiField: 'images[]',
+          );
+          if (ok) return true;
+        }
       }
       return false;
-    } catch (e) {
-      debugPrint('❌ create error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  // ---------- PUT: Editar ----------
+  // ---------- PUT: Editar (JSON primero; fallback multipart) ----------
   Future<bool> update(String id, Map<String, dynamic> data) async {
     try {
       final payload = _mapToBackendFields(data);
@@ -324,6 +342,7 @@ class PropertyService {
         _join(baseApi, '/properties/$id'),
         _join(baseApi, '/property/$id'),
       ];
+
       for (final p in paths) {
         final res = await http
             .put(
@@ -332,17 +351,28 @@ class PropertyService {
               body: jsonEncode(payload),
             )
             .timeout(const Duration(seconds: 25));
-        debugPrint('PUT $p => ${res.statusCode}');
+        debugPrint('PUT $p (JSON) => ${res.statusCode}');
         if (res.statusCode == 200) return true;
+
+        if (res.statusCode == 415 || res.statusCode == 400) {
+          final ok = await _sendMultipart(
+            'PUT',
+            [p],
+            payload,
+            const [],
+            singleField: 'image',
+            multiField: 'images[]',
+          );
+          if (ok) return true;
+        }
       }
       return false;
-    } catch (e) {
-      debugPrint('❌ update error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  // ---------- DELETE: Eliminar ----------
+  // ---------- DELETE ----------
   Future<bool> delete(String id) async {
     try {
       final base = ApiConstants.baseUrl;
@@ -361,36 +391,84 @@ class PropertyService {
         if (res.statusCode == 200 || res.statusCode == 204) return true;
       }
       return false;
-    } catch (e) {
-      debugPrint('❌ delete error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  // ---------- Mis propiedades (si tu backend lo soporta) ----------
+  // ---------- Mis propiedades (ROBUSTO) ----------
   Future<List<dynamic>> getMyProperties() async {
     try {
       final base = ApiConstants.baseUrl;
       final prefix = ApiConstants.apiPrefix;
       final baseApi = prefix.isNotEmpty ? _join(base, prefix) : base;
 
-      final candidates = <String>[
+      // 1) Intenta rutas /me
+      final meCandidates = <String>[
         _join(baseApi, '/properties/me'),
         _join(baseApi, '/property/me'),
+        _join(baseApi, '/users/me/properties'),
+        _join(baseApi, '/companies/me/properties'),
+        _join(baseApi, '/empresas/me/properties'),
       ];
-      final res = await _tryManyGet(candidates, const {});
-      if (res.statusCode != 200) {
-        throw Exception('Error ${res.statusCode}: ${res.body}');
+      final resMe = await _tryManyGet(meCandidates, const {});
+      if (resMe.statusCode == 200) {
+        final body = jsonDecode(resMe.body);
+        return _parseList(body);
       }
-      final body = jsonDecode(res.body);
-      return _parseList(body);
-    } catch (e) {
-      debugPrint('❌ getMyProperties error: $e');
-      return [];
+
+      // 2) Si /me no existe, filtra en /properties por userId/companyId
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getInt('userId') ?? prefs.getInt('idUsuario');
+      final companyId =
+          prefs.getInt('companyId') ??
+          prefs.getInt('empresaId') ??
+          prefs.getInt('idEmpresa');
+
+      if (userId == null && companyId == null) return const [];
+
+      final listCandidates = <String>[
+        _join(baseApi, '/properties'),
+        _join(baseApi, '/property'),
+        _join(baseApi, '/properties/list'),
+      ];
+
+      // nombres de query comunes
+      final filterQueries = <Map<String, dynamic>>[
+        if (userId != null) {'userId': userId},
+        if (userId != null) {'ownerId': userId},
+        if (userId != null) {'createdBy': userId},
+        if (companyId != null) {'companyId': companyId},
+        if (companyId != null) {'empresaId': companyId},
+      ];
+
+      for (final q in filterQueries) {
+        final res = await _tryManyGet(listCandidates, q);
+        if (res.statusCode == 200) {
+          final items = _parseList(jsonDecode(res.body));
+          if (items.isNotEmpty) return items;
+        }
+      }
+
+      // 3) Último intento: filtro anidado (ej. ?filter[ownerId]=1)
+      final nestedFilter = <String, dynamic>{
+        if (userId != null) 'filter[ownerId]': userId,
+        if (companyId != null) 'filter[companyId]': companyId,
+      };
+      if (nestedFilter.isNotEmpty) {
+        final res = await _tryManyGet(listCandidates, nestedFilter);
+        if (res.statusCode == 200) {
+          return _parseList(jsonDecode(res.body));
+        }
+      }
+
+      return const [];
+    } catch (_) {
+      return const [];
     }
   }
 
-  // ---------- Favoritos (si existe en backend) ----------
+  // ---------- Favoritos (toggle) ----------
   Future<bool> toggleFavorite(String id) async {
     try {
       final base = ApiConstants.baseUrl;
@@ -409,13 +487,12 @@ class PropertyService {
         if (res.statusCode == 200 || res.statusCode == 201) return true;
       }
       return false;
-    } catch (e) {
-      debugPrint('❌ toggleFavorite error: $e');
+    } catch (_) {
       return false;
     }
   }
 
-  // ---------- Upload imagen (cuando tengas endpoint real) ----------
+  // ---------- Upload imagen (endpoint separado; opcional) ----------
   Future<String> uploadImage(File file, {String fieldName = 'file'}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -434,14 +511,175 @@ class PropertyService {
 
       final streamed = await req.send();
       final res = await http.Response.fromStream(streamed);
-      if (res.statusCode >= 400) {
-        throw Exception('Upload error ${res.statusCode}: ${res.body}');
-      }
+      if (res.statusCode >= 400) throw Exception('Upload error');
       final body = jsonDecode(res.body);
       return (body['url'] ?? body['secure_url']) as String;
     } catch (e) {
-      debugPrint('❌ uploadImage error: $e');
       rethrow;
+    }
+  }
+
+  // ---------- CREATE/UPDATE con MULTIPART (con imágenes) ----------
+  Future<bool> createMultipart(
+    Map<String, dynamic> data,
+    List<File> images, {
+    String singleField = 'image',
+    String multiField = 'images[]',
+  }) async {
+    final okJson = await create(data);
+    if (okJson || images.isEmpty) return okJson;
+
+    final payload = _mapToBackendFields(data);
+    final base = ApiConstants.baseUrl;
+    final prefix = ApiConstants.apiPrefix;
+    final baseApi = prefix.isNotEmpty ? _join(base, prefix) : base;
+
+    final paths = [_join(baseApi, '/properties'), _join(baseApi, '/property')];
+    return _sendMultipart(
+      'POST',
+      paths,
+      payload,
+      images,
+      singleField: singleField,
+      multiField: multiField,
+    );
+  }
+
+  Future<bool> updateMultipart(
+    String id,
+    Map<String, dynamic> data,
+    List<File> images, {
+    String singleField = 'image',
+    String multiField = 'images[]',
+  }) async {
+    final okJson = await update(id, data);
+    if (okJson || images.isEmpty) return okJson;
+
+    final payload = _mapToBackendFields(data);
+    final base = ApiConstants.baseUrl;
+    final prefix = ApiConstants.apiPrefix;
+    final baseApi = prefix.isNotEmpty ? _join(base, prefix) : base;
+
+    final paths = [
+      _join(baseApi, '/properties/$id'),
+      _join(baseApi, '/property/$id'),
+    ];
+    return _sendMultipart(
+      'PUT',
+      paths,
+      payload,
+      images,
+      singleField: singleField,
+      multiField: multiField,
+    );
+  }
+
+  Future<bool> _sendMultipart(
+    String method,
+    List<String> candidatePaths,
+    Map<String, dynamic> fields,
+    List<File> images, {
+    required String singleField,
+    required String multiField,
+  }) async {
+    try {
+      final auth = await _onlyAuthHeader();
+      for (final p in candidatePaths) {
+        final req = http.MultipartRequest(method, _uri(p));
+        req.headers.addAll(auth);
+
+        fields.forEach((k, v) {
+          if (v == null) return;
+          if (v is Map || v is List) {
+            req.fields[k] = jsonEncode(v);
+          } else {
+            req.fields[k] = '$v';
+          }
+        });
+
+        if (images.isNotEmpty) {
+          if (images.length == 1) {
+            req.files.add(
+              await http.MultipartFile.fromPath(singleField, images.first.path),
+            );
+          } else {
+            for (final f in images) {
+              req.files.add(
+                await http.MultipartFile.fromPath(multiField, f.path),
+              );
+            }
+          }
+        }
+
+        final streamed = await req.send();
+        final res = await http.Response.fromStream(streamed);
+        debugPrint('$method $p (multipart) => ${res.statusCode}');
+        if (res.statusCode == 201 || res.statusCode == 200) return true;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ---------- Reservas (usuario) ----------
+  Future<List<dynamic>> getMyReservations() async {
+    try {
+      final base = ApiConstants.baseUrl;
+      final prefix = ApiConstants.apiPrefix;
+      final baseApi = prefix.isNotEmpty ? _join(base, prefix) : base;
+
+      final candidates = <String>[
+        _join(baseApi, '/reservations/me'),
+        _join(baseApi, '/reservas/mias'),
+        _join(baseApi, '/reservas/me'),
+        _join(baseApi, '/bookings/me'),
+        _join(baseApi, '/booking/me'),
+      ];
+
+      final res = await _tryManyGet(candidates, const {});
+      if (res.statusCode != 200) return const [];
+      return _parseList(jsonDecode(res.body));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<dynamic>> getMyReservationsSafe() async {
+    try {
+      return await getMyReservations();
+    } catch (_) {
+      return <dynamic>[];
+    }
+  }
+
+  // ---------- Favoritos (usuario) ----------
+  Future<List<dynamic>> getMyFavorites() async {
+    try {
+      final base = ApiConstants.baseUrl;
+      final prefix = ApiConstants.apiPrefix;
+      final baseApi = prefix.isNotEmpty ? _join(base, prefix) : base;
+
+      final candidates = <String>[
+        _join(baseApi, '/favorites/me'),
+        _join(baseApi, '/favoritos/mios'),
+        _join(baseApi, '/favoritos/me'),
+        _join(baseApi, '/properties/favorites/me'),
+      ];
+
+      final res = await _tryManyGet(candidates, const {});
+      if (res.statusCode != 200) return const [];
+      return _parseList(jsonDecode(res.body));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<List<dynamic>> getMyFavoritesSafe() async {
+    try {
+      return await getMyFavorites();
+    } catch (_) {
+      return <dynamic>[];
     }
   }
 
@@ -453,7 +691,6 @@ class PropertyService {
 
   static Future<List<dynamic>> obtenerPropiedadesDestacadas() async {
     final svc = PropertyService();
-    // tu backend espera "destacado: true"
     return svc.getAll(filters: {'destacado': true});
   }
 
@@ -486,19 +723,17 @@ class PropertyService {
 
   static Future<List<dynamic>> buscarPropiedades(String query) async {
     final svc = PropertyService();
-    // "ubicacion" como búsqueda libre; ajusta si usas otro campo
     return svc.getAll(filters: {'ubicacion': query});
   }
 
   static Future<bool> reservarPropiedad(int propertyId) async {
-    // Placeholder: implementa según tu backend real (reservas)
     final svc = PropertyService();
     return svc.toggleFavorite(propertyId.toString());
   }
 
   static Future<List<dynamic>> obtenerReservasUsuario() async {
-    // Placeholder: implementa según tu backend real
-    return const [];
+    final svc = PropertyService();
+    return svc.getMyReservationsSafe();
   }
 
   static Future<List<dynamic>> obtenerMisPropiedades() async {

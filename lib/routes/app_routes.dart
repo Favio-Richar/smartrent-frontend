@@ -1,3 +1,4 @@
+// lib/routes/app_routes.dart
 import 'package:flutter/material.dart';
 
 // --- Autenticación ---
@@ -63,7 +64,7 @@ class AppRoutes {
   static final Map<String, WidgetBuilder> routes = {
     splash: (_) => const SplashPage(),
     login: (_) => const auth_login.LoginPage(),
-    register: (_) => const auth_register.UserRegisterPage(), // 👈 clase exacta
+    register: (_) => const auth_register.UserRegisterPage(),
     forgotPassword: (_) => const auth_forgot.ForgotPasswordPage(),
 
     mainMenu: (_) => const MainMenuPage(),
@@ -72,7 +73,7 @@ class AppRoutes {
     empresas: (_) => const EmpresasPage(),
 
     arriendos: (_) => const ArriendosPage(),
-    arriendosMis: (_) => const MisArriendosPage(),
+    arriendosMis: (_) => const MisArriendosPage(), // 👈 sin alias
     arriendosCrear: (_) => const CrearArriendoPage(),
     arriendosReservasEmpresa: (_) => const ReservasPage(empresa: true),
     arriendosReservasUsuario: (_) => const ReservasPage(empresa: false),

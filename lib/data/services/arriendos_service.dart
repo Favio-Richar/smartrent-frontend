@@ -1,106 +1,76 @@
+// lib/data/services/arriendos_service.dart
 // ===============================================================
-// 🔹 ARRIENDOS SERVICE - SMARTRENT+
+// 🔹 ARRIENDOS SERVICE - SMARTRENT+ (versión corregida)
 // ===============================================================
-// Servicio central para manejar propiedades, reservas, reseñas y
-// estadísticas del módulo de Arriendos. Conexión con backend NestJS.
+// - Usa ApiService (que ya compone la URL con ApiConstants.url).
+// - NO usa ApiService.baseUrl ni ApiService.Api (no existen).
+// - Endpoints relativos a /api del backend NestJS.
+// - Métodos tipados y listos para usar con/ sin token JWT.
 // ===============================================================
 
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:smartrent_plus/data/services/api_service.dart';
 
 class ArriendosService {
-  static final String baseUrl = "${ApiService.baseUrl}/arriendos";
+  final ApiService _api;
+  ArriendosService({String? token}) : _api = ApiService(token: token);
 
   // ===========================================================
-  // 🔹 PROPIEDADES
+  // 🔹 PROPIEDADES  (/api/properties)
   // ===========================================================
-  static Future<List<dynamic>> obtenerPropiedades() async {
-    final res = await http.get(Uri.parse("$baseUrl/listar"));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
-    } else {
-      throw Exception("Error al obtener propiedades");
-    }
+  Future<List<dynamic>> obtenerPropiedades({int page = 1}) async {
+    final data = await _api.get('properties', query: {'page': page});
+    return (data as List?) ?? [];
   }
 
-  static Future<bool> crearPropiedad(Map<String, dynamic> data) async {
-    final res = await http.post(
-      Uri.parse("$baseUrl/crear"),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
-    return res.statusCode == 201;
+  Future<Map<String, dynamic>> crearPropiedad(Map<String, dynamic> body) async {
+    final data = await _api.post('properties', body);
+    return (data as Map).cast<String, dynamic>();
   }
 
-  static Future<bool> actualizarPropiedad(
-    int id,
-    Map<String, dynamic> data,
+  Future<Map<String, dynamic>> actualizarPropiedad(
+    String id,
+    Map<String, dynamic> body,
   ) async {
-    final res = await http.put(
-      Uri.parse("$baseUrl/$id"),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
-    return res.statusCode == 200;
+    final data = await _api.put('properties/$id', body);
+    return (data as Map).cast<String, dynamic>();
   }
 
-  static Future<bool> eliminarPropiedad(int id) async {
-    final res = await http.delete(Uri.parse("$baseUrl/$id"));
-    return res.statusCode == 200;
+  Future<void> eliminarPropiedad(String id) async {
+    await _api.delete('properties/$id');
   }
 
   // ===========================================================
-  // 🔹 RESERVAS
+  // 🔹 RESERVAS  (/api/reservas)
   // ===========================================================
-  static Future<List<dynamic>> obtenerReservas() async {
-    final res = await http.get(Uri.parse("$baseUrl/reservas"));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
-    } else {
-      throw Exception("Error al obtener reservas");
-    }
+  Future<List<dynamic>> obtenerReservas({int page = 1}) async {
+    final data = await _api.get('reservas', query: {'page': page});
+    return (data as List?) ?? [];
   }
 
-  static Future<bool> crearReserva(Map<String, dynamic> data) async {
-    final res = await http.post(
-      Uri.parse("$baseUrl/reservas"),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
-    return res.statusCode == 201;
+  Future<Map<String, dynamic>> crearReserva(Map<String, dynamic> body) async {
+    final data = await _api.post('reservas', body);
+    return (data as Map).cast<String, dynamic>();
   }
 
   // ===========================================================
-  // 🔹 RESEÑAS
+  // 🔹 RESEÑAS  (/api/resenas)
   // ===========================================================
-  static Future<List<dynamic>> obtenerResenas() async {
-    final res = await http.get(Uri.parse("$baseUrl/reseñas"));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
-    } else {
-      throw Exception("Error al obtener reseñas");
-    }
+  Future<List<dynamic>> obtenerResenas({int page = 1}) async {
+    // Nota: usar 'resenas' (sin ñ) salvo que tu backend exponga exactamente 'reseñas'
+    final data = await _api.get('resenas', query: {'page': page});
+    return (data as List?) ?? [];
   }
 
-  static Future<bool> enviarResena(Map<String, dynamic> data) async {
-    final res = await http.post(
-      Uri.parse("$baseUrl/reseñas"),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(data),
-    );
-    return res.statusCode == 201;
+  Future<Map<String, dynamic>> enviarResena(Map<String, dynamic> body) async {
+    final data = await _api.post('resenas', body);
+    return (data as Map).cast<String, dynamic>();
   }
 
   // ===========================================================
-  // 🔹 ESTADÍSTICAS
+  // 🔹 ESTADÍSTICAS  (/api/estadisticas/arriendos)
   // ===========================================================
-  static Future<Map<String, dynamic>> obtenerEstadisticas() async {
-    final res = await http.get(Uri.parse("$baseUrl/estadisticas"));
-    if (res.statusCode == 200) {
-      return jsonDecode(res.body);
-    } else {
-      throw Exception("Error al cargar estadísticas");
-    }
+  Future<Map<String, dynamic>> obtenerEstadisticasArriendos() async {
+    final data = await _api.get('estadisticas/arriendos');
+    return (data as Map).cast<String, dynamic>();
   }
 }

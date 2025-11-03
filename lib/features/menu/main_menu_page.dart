@@ -6,15 +6,13 @@
 import 'package:flutter/material.dart';
 import 'package:smartrent_plus/core/theme/app_theme.dart';
 
-// Páginas principales (cambia las rutas si tu estructura difiere)
+// Páginas principales
 import 'package:smartrent_plus/features/dashboard/dashboard_page.dart';
 import 'package:smartrent_plus/features/arriendos/arriendos_page.dart';
 import 'package:smartrent_plus/features/ventas/ventas_page.dart';
 import 'package:smartrent_plus/features/empresas/empresas_page.dart';
-import 'package:smartrent_plus/features/empleos/empleos_page.dart';
-import 'package:smartrent_plus/features/suscripciones/suscripciones_page.dart';
+import 'package:smartrent_plus/features/empleos/usuario_empleos_page.dart';
 import 'package:smartrent_plus/features/perfil/perfil_page.dart';
-import 'package:smartrent_plus/features/soporte/soporte_page.dart';
 
 // Submódulos de Arriendos
 import 'package:smartrent_plus/features/arriendos/mis_arriendos_page.dart';
@@ -38,10 +36,8 @@ class _MainMenuPageState extends State<MainMenuPage> {
     ArriendosPage(), // 1 (Catálogo)
     VentasPage(), // 2
     EmpresasPage(), // 3
-    EmpleosPage(), // 4
-    SuscripcionesPage(), // 5
-    PerfilPage(), // 6
-    SoportePage(), // 7
+    UsuarioEmpleosPage(), // 4
+    PerfilPage(), // 5
   ];
 
   final List<String> _titles = const [
@@ -50,9 +46,7 @@ class _MainMenuPageState extends State<MainMenuPage> {
     "Ventas",
     "Empresas",
     "Empleos",
-    "Suscripciones",
     "Perfil",
-    "Soporte",
   ];
 
   void _onItemTapped(int index) {
@@ -92,15 +86,10 @@ class _MainMenuPageState extends State<MainMenuPage> {
             _buildMenuItem(Icons.store_mall_directory, "Ventas", 2),
             _buildMenuItem(Icons.apartment_outlined, "Empresas", 3),
             _buildMenuItem(Icons.work_outline, "Empleos", 4),
-            _buildMenuItem(Icons.star_border, "Suscripciones", 5),
 
             // Cuenta
             _buildSectionTitle("Cuenta"),
-            _buildMenuItem(Icons.person_outline, "Perfil", 6),
-
-            // Ayuda
-            _buildSectionTitle("Ayuda"),
-            _buildMenuItem(Icons.support_agent, "Soporte", 7),
+            _buildMenuItem(Icons.person_outline, "Perfil", 5),
 
             const Divider(),
             ListTile(

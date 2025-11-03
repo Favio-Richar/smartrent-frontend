@@ -28,6 +28,11 @@ dependencies:
   google_maps_flutter: ^2.7.0
   geocoding: ^2.2.0
 
+  # ⬇️ Necesarios para la nueva vista empresarial (importar/exportar/compartir/archivos)
+  file_picker: ^8.1.2
+  share_plus: ^10.0.2
+  path_provider: ^2.1.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
