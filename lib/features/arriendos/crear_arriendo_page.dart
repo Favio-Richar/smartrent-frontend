@@ -1,12 +1,6 @@
 // lib/features/arriendos/crear_arriendo_page.dart
 // ===============================================================
 // SmartRent+ · Crear/Editar Arriendo (vista empresarial)
-// - Stepper por secciones (PageView + barra inferior)
-// - Selector de tipo (propiedad, vehículo, herramienta, oficina, cancha, piscina, terreno)
-// - Categorías dependientes del tipo (Autocomplete que se actualiza al cambiar el tipo)
-// - Importar/Exportar JSON (file_picker/share_plus/path_provider)
-// - Vista previa, WhatsApp, Google Maps
-// - Pequeñas animaciones (AnimatedSwitcher/AnimatedSize)
 // ===============================================================
 
 import 'dart:convert';
@@ -22,6 +16,15 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
+// ====== NUEVOS IMPORTS (media/mapa) ======
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:geocoding/geocoding.dart';
 
 class CrearArriendoPage extends StatefulWidget {
   final String? editId;
@@ -115,6 +118,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   final List<File> _images = [];
   String? _remoteImage;
 
+  // ====== NUEVO: video local seleccionado/grabado ======
+  File? _localVideo;
+
   // Catálogos
   List<String> _tipos = const [];
   List<String> _comunas = const [];
@@ -163,6 +169,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   final _ofiSalas = TextEditingController();
   final _ofiEstacionamientos = TextEditingController();
 
+  // ====== NUEVO: punto de mapa ======
+  LatLng? _point;
+
   @override
   void initState() {
     super.initState();
@@ -173,6 +182,11 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
       _category.clear();
       setState(() {}); // fuerza rebuild para actualizar sugerencias
     });
+
+    // ====== NUEVO: listeners para refrescar video/mapa ======
+    _videoUrl.addListener(() => setState(() {}));
+    _lat.addListener(() => _syncPointFromLatLng());
+    _lng.addListener(() => _syncPointFromLatLng());
   }
 
   Future<void> _boot() async {
@@ -224,6 +238,8 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
 
     _destacado.value = (p['featured'] ?? p['destacado'] ?? false) == true;
     _remoteImage = _s(p['image_url'] ?? p['imageUrl']);
+
+    _syncPointFromLatLng();
   }
 
   void _hydrateMeta(Map meta) {
@@ -350,7 +366,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   String? _optText(TextEditingController c) =>
       c.text.trim().isEmpty ? null : c.text.trim();
 
-  // -------------------- Media --------------------
+  // -------------------- Media (fotos) --------------------
   Future<void> _pickImages() async {
     final picker = ImagePicker();
     final list = await picker.pickMultiImage(imageQuality: 85);
@@ -365,8 +381,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   String? _reqIfPropiedad(String? v) {
     if (!(_type.value == 'propiedad' ||
         _type.value == 'terreno' ||
-        _type.value == 'oficina'))
+        _type.value == 'oficina')) {
       return null;
+    }
     return (v == null || v.trim().isEmpty) ? 'Campo obligatorio' : null;
   }
 
@@ -454,6 +471,11 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                 alignment: Alignment.centerLeft,
                 child: Text(_desc.text.trim()),
               ),
+              // ====== NUEVO: preview de video también en previsualización ======
+              if (_videoUrl.text.trim().isNotEmpty || _localVideo != null) ...[
+                const SizedBox(height: 12),
+                _videoPreview(_videoUrl.text.trim()),
+              ],
               const SizedBox(height: 16),
             ],
           ),
@@ -477,7 +499,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
       "bedrooms": NumberUtils.toIntSafe(_beds.text),
       "bathrooms": NumberUtils.toIntSafe(_baths.text),
       "year": NumberUtils.toIntSafe(_year.text),
-      "video_url": _optText(_videoUrl),
+      "video_url": _optText(
+        _videoUrl,
+      ), // (si subes video archivo, extender svc)
       "featured": _destacado.value,
       "companyName": _optText(_companyName),
       "contactName": _optText(_contactName),
@@ -549,7 +573,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
 
     _destacado.value = (map['featured'] ?? false) == true;
 
-    if (mounted) setState(() {});
+    _syncPointFromLatLng();
+
+    if (!mounted) return;
+    setState(() {});
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Ficha importada')));
@@ -724,7 +751,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
               ),
               const SizedBox(height: 16),
 
-              // Selector de tipo (chips con animación suave)
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -756,7 +782,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
               ),
               const SizedBox(height: 12),
 
-              // Categoría dependiente del tipo (se actualiza al cambiar _type)
               ValueListenableBuilder<String>(
                 valueListenable: _type,
                 builder: (_, currentType, __) {
@@ -793,6 +818,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                   labelText: 'Calle y número',
                   prefixIcon: Icon(Icons.location_on_outlined),
                 ),
+                onChanged: (_) {},
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -842,6 +868,26 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+
+              // ====== NUEVO: Geocodificar y mapa ======
+              Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _geocodeAddress,
+                    icon: const Icon(Icons.travel_explore),
+                    label: const Text('Buscar en mapa'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: _openMaps,
+                    icon: const Icon(Icons.directions),
+                    label: const Text('Navegar'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _miniMap(),
             ],
           ),
         ),
@@ -898,12 +944,18 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                       validator: _reqIfPropiedad,
                     ),
                   ],
-                  if (t == 'vehiculo') ..._vehiculoFields(),
-                  if (t == 'cancha') ..._canchaFields(),
-                  if (t == 'piscina') ..._piscinaFields(),
-                  if (t == 'herramienta') ..._herramientaFields(),
-                  if (t == 'terreno') ..._terrenoFields(),
-                  if (t == 'oficina') ..._oficinaFields(),
+                  if (t == 'vehiculo')
+                    ..._vehiculoFields()
+                  else if (t == 'cancha')
+                    ..._canchaFields()
+                  else if (t == 'piscina')
+                    ..._piscinaFields()
+                  else if (t == 'herramienta')
+                    ..._herramientaFields()
+                  else if (t == 'terreno')
+                    ..._terrenoFields()
+                  else if (t == 'oficina')
+                    ..._oficinaFields(),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _year,
@@ -922,6 +974,36 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                       prefixIcon: Icon(Icons.ondemand_video_outlined),
                     ),
                   ),
+                  const SizedBox(height: 8),
+
+                  // ====== NUEVO: acciones de video (grabar / subir / quitar) ======
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _recordVideo,
+                        icon: const Icon(Icons.videocam_outlined),
+                        label: const Text('Grabar'),
+                      ),
+                      const SizedBox(width: 8),
+                      OutlinedButton.icon(
+                        onPressed: _pickVideoFromGallery,
+                        icon: const Icon(Icons.video_library_outlined),
+                        label: const Text('Subir'),
+                      ),
+                      const SizedBox(width: 8),
+                      if (_localVideo != null ||
+                          _videoUrl.text.trim().isNotEmpty)
+                        IconButton(
+                          tooltip: 'Quitar video',
+                          onPressed: _clearVideo,
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+                  // ====== NUEVO: preview de video en el formulario ======
+                  _videoPreview(_videoUrl.text),
                   const SizedBox(height: 6),
                   ValueListenableBuilder(
                     valueListenable: _destacado,
@@ -1519,6 +1601,236 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     }
   }
 
+  // ====== HELPERS VIDEO & MAPA (MEJORADOS) ======
+
+  // ¿Es un enlace/ID de YouTube?
+  bool _isYouTube(String u) {
+    final lu = u.toLowerCase();
+    return lu.contains('youtube.com') ||
+        lu.contains('youtu.be') ||
+        lu.length == 11;
+  }
+
+  // Extrae el ID de YouTube desde ID directo, watch, youtu.be, shorts, etc.
+  String? _extractYouTubeId(String input) {
+    final s = input.trim();
+    final idOnly = RegExp(r'^[0-9A-Za-z_-]{11}$');
+    if (idOnly.hasMatch(s)) return s;
+
+    Uri? uri;
+    try {
+      uri = Uri.parse(s);
+    } catch (_) {}
+
+    if (uri != null && uri.host.isNotEmpty) {
+      // ?v=xxxx
+      final v = uri.queryParameters['v'];
+      if (v != null && idOnly.hasMatch(v)) return v;
+
+      // youtu.be/<id> o /shorts/<id> o /embed/<id>
+      final segs = uri.pathSegments;
+      if (uri.host.contains('youtu.be') && segs.isNotEmpty) {
+        final cand = segs.last;
+        if (idOnly.hasMatch(cand)) return cand;
+      }
+      if (segs.isNotEmpty) {
+        final cand = segs.last;
+        if (idOnly.hasMatch(cand)) return cand;
+      }
+    }
+
+    final m = RegExp(r'([0-9A-Za-z_-]{11})').firstMatch(s);
+    return m?.group(1);
+  }
+
+  String _ytWatchUrl(String id) => 'https://www.youtube.com/watch?v=$id';
+
+  bool _isLocalPath(String u) => u.startsWith('/') || u.startsWith('file:');
+  bool _isMp4(String u) => u.toLowerCase().endsWith('.mp4') || _isLocalPath(u);
+
+  Future<Widget> _mp4Player(String url) async {
+    final VideoPlayerController vc = _isLocalPath(url)
+        ? VideoPlayerController.file(File(url.replaceFirst('file://', '')))
+        : VideoPlayerController.networkUrl(Uri.parse(url));
+    await vc.initialize();
+    return Chewie(
+      controller: ChewieController(
+        videoPlayerController: vc,
+        autoInitialize: true,
+        allowFullScreen: true,
+        allowMuting: true,
+      ),
+    );
+  }
+
+  // Preview con prioridad al video local
+  Widget _videoPreview(String? url) {
+    if ((url == null || url.trim().isEmpty) && _localVideo == null) {
+      return const SizedBox.shrink();
+    }
+
+    // 1) Local
+    if (_localVideo != null) {
+      return FutureBuilder<Widget>(
+        future: _mp4Player(_localVideo!.path),
+        builder: (_, s) => s.hasData
+            ? AspectRatio(aspectRatio: 16 / 9, child: s.data!)
+            : const SizedBox(height: 180),
+      );
+    }
+
+    // 2) YouTube
+    final u = url!.trim();
+    if (_isYouTube(u)) {
+      final id = _extractYouTubeId(u);
+      if (id == null) return const Text('Link de YouTube inválido');
+
+      final ctrl = YoutubePlayerController.fromVideoId(
+        videoId: id,
+        params: const YoutubePlayerParams(showFullscreenButton: true),
+      );
+
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AspectRatio(
+            aspectRatio: 16 / 9,
+            child: YoutubePlayer(controller: ctrl),
+          ),
+          const SizedBox(height: 6),
+          TextButton.icon(
+            onPressed: () => launchUrl(
+              Uri.parse(_ytWatchUrl(id)),
+              mode: LaunchMode.externalApplication,
+            ),
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Abrir en YouTube'),
+          ),
+        ],
+      );
+    }
+
+    // 3) MP4 remoto
+    if (_isMp4(u)) {
+      return FutureBuilder<Widget>(
+        future: _mp4Player(u),
+        builder: (_, s) => s.hasData
+            ? AspectRatio(aspectRatio: 16 / 9, child: s.data!)
+            : const SizedBox(height: 180),
+      );
+    }
+
+    // 4) Otro enlace: abrir afuera
+    return TextButton.icon(
+      onPressed: () =>
+          launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication),
+      icon: const Icon(Icons.open_in_new),
+      label: const Text('Abrir video'),
+    );
+  }
+
+  // ====== Acciones de video ======
+  Future<void> _pickVideoFromGallery() async {
+    final picker = ImagePicker();
+    final x = await picker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 5),
+    );
+    if (x == null) return;
+    setState(() {
+      _localVideo = File(x.path);
+      _videoUrl.text = x.path; // visible para el usuario
+    });
+  }
+
+  Future<void> _recordVideo() async {
+    final picker = ImagePicker();
+    final x = await picker.pickVideo(
+      source: ImageSource.camera,
+      maxDuration: const Duration(minutes: 5),
+    );
+    if (x == null) return;
+    setState(() {
+      _localVideo = File(x.path);
+      _videoUrl.text = x.path;
+    });
+  }
+
+  void _clearVideo() {
+    setState(() {
+      _localVideo = null;
+      _videoUrl.clear();
+    });
+  }
+
+  // ====== MAPA ======
+  void _syncPointFromLatLng() {
+    final la = NumberUtils.toDoubleSafe(_lat.text);
+    final lo = NumberUtils.toDoubleSafe(_lng.text);
+    if (la != null && lo != null) setState(() => _point = LatLng(la, lo));
+  }
+
+  Future<void> _geocodeAddress() async {
+    final parts = [
+      _street.text.trim(),
+      _location.text.trim(),
+      _comunaCtrl.text.trim(),
+      'Chile',
+    ].where((e) => e.isNotEmpty).join(', ');
+
+    if (parts.length < 5) return;
+    try {
+      final list = await locationFromAddress(parts, localeIdentifier: 'es_CL');
+      if (list.isNotEmpty) {
+        final la = list.first.latitude;
+        final lo = list.first.longitude;
+        _lat.text = la.toStringAsFixed(6);
+        _lng.text = lo.toStringAsFixed(6);
+        setState(() => _point = LatLng(la, lo));
+      }
+    } catch (_) {}
+  }
+
+  Widget _miniMap() {
+    if (_point == null) {
+      return Container(
+        height: 160,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: const Color(0xFFEFF2F7),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text('Escribe la dirección o lat/lng para ver el mapa'),
+      );
+    }
+    return SizedBox(
+      height: 200,
+      child: FlutterMap(
+        options: MapOptions(initialCenter: _point!, initialZoom: 15),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          ),
+
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _point!,
+                width: 40,
+                height: 40,
+                child: const Icon(
+                  Icons.location_on,
+                  size: 40,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _title.dispose();
@@ -1632,7 +1944,7 @@ class _Select<T> extends StatelessWidget {
       valueListenable: valueListenable,
       builder: (_, v, __) {
         return DropdownButtonFormField<T>(
-          value: v ?? (options.isNotEmpty ? options.first : null),
+          initialValue: v ?? (options.isNotEmpty ? options.first : null),
           decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
           items: options
               .map((e) => DropdownMenuItem<T>(value: e, child: Text('$e')))
@@ -1651,7 +1963,6 @@ class _MediaPreview extends StatelessWidget {
   final VoidCallback? onClearRemote;
 
   const _MediaPreview({
-    super.key,
     required this.images,
     this.remoteImage,
     this.onRemoveLocal,
@@ -1674,7 +1985,19 @@ class _MediaPreview extends StatelessWidget {
               borderRadius: BorderRadius.circular(12),
               child: AspectRatio(
                 aspectRatio: 16 / 9,
-                child: Image.network(remoteImage!, fit: BoxFit.cover),
+                child: CachedNetworkImage(
+                  imageUrl: remoteImage!,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) =>
+                      Container(color: const Color(0xFFEFF2F7)),
+                  errorWidget: (_, __, ___) => Container(
+                    color: const Color(0xFFEFF2F7),
+                    child: const Icon(
+                      Icons.broken_image_outlined,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
               ),
             ),
             Positioned(
@@ -1835,9 +2158,7 @@ class _BottomStepper extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          border: Border(
-            top: BorderSide(color: Colors.black12.withOpacity(.06)),
-          ),
+          border: const Border(top: BorderSide(color: Color(0x0F000000))),
         ),
         child: Row(
           children: [

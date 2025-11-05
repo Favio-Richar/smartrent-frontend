@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:smartrent_plus/features/dashboard/dashboard_page.dart';
 import 'package:smartrent_plus/features/arriendos/arriendos_page.dart';
 import 'package:smartrent_plus/features/ventas/ventas_page.dart';
-import 'package:smartrent_plus/features/empleos/empleos_page.dart';
 import 'package:smartrent_plus/features/suscripciones/suscripciones_page.dart';
 import 'package:smartrent_plus/features/perfil/perfil_page.dart';
 import 'package:smartrent_plus/core/theme/app_theme.dart';
@@ -26,7 +25,6 @@ class _MainMenuPageState extends State<MainMenuPage> {
     DashboardPage(),
     ArriendosPage(),
     VentasPage(),
-    EmpleosPage(),
     SuscripcionesPage(),
     PerfilPage(),
   ];

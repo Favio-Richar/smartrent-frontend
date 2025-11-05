@@ -222,3 +222,4 @@ class AuthService {
     return {'id': id, 'role': role, 'token': token};
   }
 }
+

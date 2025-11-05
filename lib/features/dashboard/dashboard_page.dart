@@ -1,12 +1,4 @@
-// ===============================================================
-// 🔹 DASHBOARD PAGE - SMARTRENT+ (Versión final estable y funcional)
-// ===============================================================
-// Vista moderna y funcional del dashboard principal.
-// Muestra el resumen general con cards interactivos que redirigen
-// a Arriendos, Ventas, Empleos y Favoritos.
-// Se eliminó el AppBar para evitar duplicación con el menú lateral.
-// ===============================================================
-
+// lib/features/dashboard/dashboard_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dashboard_controller.dart';
@@ -36,8 +28,6 @@ class DashboardPage extends StatelessWidget {
 
           return Scaffold(
             backgroundColor: const Color(0xFFF4F6FA),
-
-            // 🧭 SIN APPBAR (usa el del menú principal)
             body: RefreshIndicator(
               onRefresh: ctrl.initDashboard,
               child: SingleChildScrollView(
@@ -48,10 +38,6 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 10),
-
-                      // ===================================================
-                      // 🧑‍💼 BIENVENIDA CON AVATAR
-                      // ===================================================
                       Row(
                         children: [
                           CircleAvatar(
@@ -73,7 +59,7 @@ class DashboardPage extends StatelessWidget {
                               Text(
                                 rol == 'Empresa'
                                     ? 'Administra tus anuncios y métricas'
-                                    : 'Explora arriendos, ventas y empleos disponibles',
+                                    : 'Explora arriendos, ventas y empleos',
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: Colors.black54,
@@ -83,23 +69,9 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 25),
-
-                      // ===================================================
-                      // 🔍 BUSCADOR GLOBAL
-                      // ===================================================
-                      SearchBarWidget(
-                        onSearch: (v) {
-                          // Lógica futura de búsqueda global
-                        },
-                      ),
-
+                      SearchBarWidget(onSearch: (v) {}),
                       const SizedBox(height: 25),
-
-                      // ===================================================
-                      // 📊 SECCIÓN DE ESTADÍSTICAS INTERACTIVAS
-                      // ===================================================
                       const Text(
                         "Tu resumen general",
                         style: TextStyle(
@@ -147,28 +119,18 @@ class DashboardPage extends StatelessWidget {
                             value: "7",
                             onTap: () => Navigator.pushNamed(
                               context,
-                              AppRoutes.favoritos,
+                              AppRoutes.empleosFavoritos,
                             ),
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 30),
-
-                      // ===================================================
-                      // 🏠 PROPIEDADES DESTACADAS (Arriendos + Ventas)
-                      // ===================================================
                       _sectionTitle('🏠 Propiedades destacadas'),
                       PropertyCarousel(listado: ctrl.propiedades),
-
                       const SizedBox(height: 25),
-
-                      // ===================================================
-                      // 💼 OFERTAS LABORALES
-                      // ===================================================
                       _sectionTitle('💼 Ofertas laborales'),
                       JobsCarousel(listado: ctrl.empleos),
-
                       const SizedBox(height: 50),
                     ],
                   ),
@@ -181,9 +143,6 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // 🔸 SECCIÓN DE TÍTULOS
-  // ============================================================
   Widget _sectionTitle(String title) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Text(
@@ -197,9 +156,6 @@ class DashboardPage extends StatelessWidget {
   );
 }
 
-// ===============================================================
-// 🔹 CARD INTERACTIVO DEL RESUMEN
-// ===============================================================
 class _StatButton extends StatelessWidget {
   final IconData icon;
   final Color color;
@@ -220,12 +176,14 @@ class _StatButton extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: onTap,
-      splashColor: color.withOpacity(0.2),
+      // 🔧 Reemplazo sin deprecations:
+      splashColor: color.withValues(alpha: 0.2),
       child: Container(
         width: 85,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          // 🔧 Reemplazo sin deprecations:
+          color: color.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(

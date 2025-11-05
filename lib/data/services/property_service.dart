@@ -133,15 +133,19 @@ class PropertyService {
     if (data.containsKey('bathrooms')) m['banos'] = data['bathrooms'];
     if (data.containsKey('year')) m['anio'] = data['year'];
 
-    // contacto
-    if (data.containsKey('company_name'))
+    // contacto (ahora con llaves para cumplir el lint)
+    if (data.containsKey('company_name')) {
       m['companyName'] = data['company_name'];
-    if (data.containsKey('contact_name'))
+    }
+    if (data.containsKey('contact_name')) {
       m['contactName'] = data['contact_name'];
-    if (data.containsKey('contact_phone'))
+    }
+    if (data.containsKey('contact_phone')) {
       m['contactPhone'] = data['contact_phone'];
-    if (data.containsKey('contact_email'))
+    }
+    if (data.containsKey('contact_email')) {
       m['contactEmail'] = data['contact_email'];
+    }
     if (data.containsKey('website')) m['website'] = data['website'];
     if (data.containsKey('whatsapp')) m['whatsapp'] = data['whatsapp'];
 

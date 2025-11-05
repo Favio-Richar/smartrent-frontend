@@ -15,8 +15,7 @@ class _UserRegisterPageState extends State<UserRegisterPage> {
   final _nombre = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  String _rol =
-      'Usuario'; // valor que el backend entiende: "Usuario" | "Empresa"
+  String _rol = 'Usuario'; // "Usuario" | "Empresa"
   bool _loading = false;
 
   Future<void> _registrarUsuario() async {
@@ -111,14 +110,15 @@ class _UserRegisterPageState extends State<UserRegisterPage> {
               ),
               const SizedBox(height: 20),
 
-              // Tipo de cuenta (si después lo necesitas)
+              // Tipo de cuenta
               const Text(
                 'Tipo de cuenta:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: _rol,
+                // ✅ evita la deprecación
+                initialValue: _rol,
                 items: const [
                   DropdownMenuItem(
                     value: 'Usuario',

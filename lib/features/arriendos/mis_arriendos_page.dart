@@ -1,15 +1,21 @@
+// lib/features/arriendos/mis_arriendos_page.dart
 // ===============================================================
 // 🔹 Mis Arriendos – Vista empresarial completa
 // - KPIs
 // - Búsqueda, filtros y orden
 // - Acciones rápidas: publicar/pausar/borrador/archivar, clonar, editar, eliminar
-// - Exportar CSV (de los resultados actuales)
+// - Exportar CSV (de los resultados actuales) → guarda y comparte archivo
 // - Paginación local + pull-to-refresh
 // - Código limpio (sin deprecaciones, con mounted checks)
 // ===============================================================
 
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+
 import 'package:smartrent_plus/data/services/property_service.dart';
 import 'package:smartrent_plus/features/arriendos/crear_arriendo_page.dart';
 
@@ -30,7 +36,6 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   bool _loading = true;
   bool _loadingMore = false;
   bool _hasMore = true;
-  int _page = 1;
   final int _limit = 15;
   String? _lastError;
 
@@ -53,20 +58,18 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
     super.dispose();
   }
 
-  // ---------- Carga ----------
+  // ====================== Carga de datos ======================
   Future<void> _load({bool reset = false}) async {
     if (reset && mounted) {
       setState(() {
         _loading = true;
         _all = [];
         _view = [];
-        _page = 1;
         _hasMore = true;
         _lastError = null;
       });
     }
     try {
-      // Puedes cambiarlo por un endpoint específico de "mis propiedades" paginado
       final data = await _svc.getMyProperties();
       if (!mounted) return;
 
@@ -74,7 +77,6 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
           .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      // Aplica filtros/orden/búsqueda y construye la primera "página"
       _applyFiltersOrderSearch();
       _rebuildPage(reset: true);
 
@@ -85,6 +87,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
         _lastError = e.toString();
         _loading = false;
       });
+      // ok porque ya verificamos mounted arriba
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Error al cargar: $e')));
@@ -101,12 +104,11 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   Future<void> _loadMore() async {
     if (!_hasMore) return;
     if (mounted) setState(() => _loadingMore = true);
-    _page += 1;
-    _rebuildPage();
+    _rebuildPage(); // pagina siguiente de la lista filtrada/ordenada
     if (mounted) setState(() => _loadingMore = false);
   }
 
-  // ---------- Búsqueda / filtros / orden ----------
+  // ====================== Búsqueda / filtros / orden ======================
   void _applyFiltersOrderSearch() {
     Iterable<Map<String, dynamic>> list = _all;
 
@@ -179,16 +181,16 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
         break;
       case _OrderBy.priceAsc:
         out.sort(
-          (a, b) => (_num(
+          (a, b) => _num(
             a['precio'] ?? a['price'],
-          )).compareTo(_num(b['precio'] ?? b['price'])),
+          ).compareTo(_num(b['precio'] ?? b['price'])),
         );
         break;
       case _OrderBy.priceDesc:
         out.sort(
-          (a, b) => (_num(
+          (a, b) => _num(
             b['precio'] ?? b['price'],
-          )).compareTo(_num(a['precio'] ?? a['price'])),
+          ).compareTo(_num(a['precio'] ?? a['price'])),
         );
         break;
     }
@@ -216,12 +218,13 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
     if (mounted) setState(() {});
   }
 
-  // ---------- Acciones ----------
+  // ====================== Acciones ======================
   Future<void> _goCreate() async {
     final created = await Navigator.push<bool>(
       context,
       MaterialPageRoute(builder: (_) => const CrearArriendoPage()),
     );
+    if (!mounted) return;
     if (created == true) await _load(reset: true);
   }
 
@@ -232,6 +235,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
         builder: (_) => CrearArriendoPage(editId: (p['id'] ?? '').toString()),
       ),
     );
+    if (!mounted) return;
     if (changed == true) await _load(reset: true);
   }
 
@@ -253,7 +257,6 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   }
 
   Future<void> _changeStatus(String id, String status) async {
-    // Implementa en tu service; si aún no existe, devuelve true para simular
     final ok = await (_svc as dynamic).changeStatus?.call(id, status) ?? true;
     if (!mounted) return;
     if (ok) {
@@ -273,6 +276,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
     if (!mounted) return;
     if (ok) {
       await _load(reset: true);
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Clonado')));
@@ -284,7 +288,6 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   }
 
   Future<void> _exportCsv() async {
-    // Genera un CSV con lo que estás viendo (filtrado/ordenado)
     final rows = <List<String>>[
       [
         'ID',
@@ -311,22 +314,23 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
         ],
       ),
     ];
-    final csv = const ListToCsv().convert(rows);
-    // Si tienes un helper para guardar/compartir, úsalo. Por ahora, solo mostramos snackbar:
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'CSV generado (simulado). Integra share/guardar si lo deseas.',
-          ),
-        ),
-      );
-    }
-    // Puedes agregar un método en service para guardar a archivo y compartir.
-    // await (_svc as dynamic).exportCsv?.call(csv);
+    final csvString = const ListToCsv().convert(rows);
+
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/mis_arriendos_${DateTime.now().millisecondsSinceEpoch}.csv',
+    );
+    await file.writeAsBytes(utf8.encode(csvString));
+
+    if (!mounted) return;
+    await Share.shareXFiles(
+      [XFile(file.path)],
+      text: 'Mis arriendos – SmartRent+',
+      subject: 'Exportación CSV',
+    );
   }
 
-  // ---------- KPIs ----------
+  // ====================== KPIs ======================
   int get _kPublicados => _all
       .where(
         (p) =>
@@ -346,7 +350,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   int get _kReservas =>
       _all.fold<int>(0, (a, b) => a + ((b['reservas'] ?? 0) as int));
 
-  // ---------- UI ----------
+  // ====================== UI ======================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -373,6 +377,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
                   initialOrder: _orderBy,
                 ),
               );
+              if (!mounted) return;
               if (res != null) {
                 _filters = res.filters;
                 _orderBy = res.orderBy;
@@ -463,7 +468,7 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
   }
 }
 
-// ---------- Widgets auxiliares ----------
+// ====================== Widgets auxiliares ======================
 
 class _SearchBox extends StatefulWidget {
   final String initial;
@@ -700,7 +705,7 @@ class _PropertyTile extends StatelessWidget {
   }
 }
 
-// ---------- BottomSheet de filtros/orden ----------
+// ====================== BottomSheet de filtros/orden ======================
 
 class _FiltersSheet extends StatefulWidget {
   final _Filters initialFilters;
@@ -755,7 +760,8 @@ class _FiltersSheetState extends State<_FiltersSheet> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String?>(
-                    value: f.status,
+                    // value → deprecated; usar initialValue
+                    initialValue: f.status,
                     decoration: const InputDecoration(labelText: 'Estado'),
                     items: _status
                         .map(
@@ -851,7 +857,8 @@ class _FiltersSheetState extends State<_FiltersSheet> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<_OrderBy>(
-              value: o,
+              // value → deprecated; usar initialValue
+              initialValue: o,
               items: const [
                 DropdownMenuItem(
                   value: _OrderBy.updatedDesc,
@@ -932,19 +939,21 @@ class _Filters {
     String? comuna,
     int? minPrice,
     int? maxPrice,
-  }) => _Filters(
-    status: status ?? this.status,
-    type: type ?? this.type,
-    category: category ?? this.category,
-    comuna: comuna ?? this.comuna,
-    minPrice: minPrice ?? this.minPrice,
-    maxPrice: maxPrice ?? this.maxPrice,
-  );
+  }) {
+    return _Filters(
+      status: status ?? this.status,
+      type: type ?? this.type,
+      category: category ?? this.category,
+      comuna: comuna ?? this.comuna,
+      minPrice: minPrice ?? this.minPrice,
+      maxPrice: maxPrice ?? this.maxPrice,
+    );
+  }
 }
 
 enum _OrderBy { updatedDesc, createdDesc, priceAsc, priceDesc }
 
-// Utilidad pequeña para CSV local (sin dependencias)
+// Utilidad pequeña para CSV local (sin dependencias externas)
 class ListToCsv {
   const ListToCsv();
   String convert(List<List<String>> rows) {

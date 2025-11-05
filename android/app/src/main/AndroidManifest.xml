@@ -1,33 +1,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.smartrent_plus">
 
-    <!-- ============================================================= -->
-    <!-- 🔹 PERMISOS NECESARIOS PARA FUNCIONES DE SMARTRENT+ -->
-    <!-- ============================================================= -->
+    <!-- Permisos básicos -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Si NO guardas en almacenamiento externo, NO uses estos permisos:
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+    -->
 
     <application
-        android:label="SmartRent+"
         android:name="${applicationName}"
+        android:label="SmartRent+"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:usesCleartextTraffic="false">
 
-        <!-- ============================================================= -->
-        <!-- 🔹 GOOGLE MAPS API KEY -->
-        <!-- ============================================================= -->
+        <!-- (Opcional) Solo si usas SDK de Google Maps nativo
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="TU_API_KEY_AQUI" />
+        -->
 
-        <!-- ============================================================= -->
-        <!-- 🔹 ACTIVIDAD PRINCIPAL -->
-        <!-- ============================================================= -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -38,7 +35,6 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- 🔸 Tema visible mientras Flutter inicializa -->
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme" />
@@ -49,21 +45,31 @@
             </intent-filter>
         </activity>
 
-        <!-- ============================================================= -->
-        <!-- 🔹 METADATA FLUTTER -->
-        <!-- ============================================================= -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- FileProvider para share_plus -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
-    <!-- ============================================================= -->
-    <!-- 🔹 CONSULTAS (Requerido por Flutter / Text Plugins) -->
-    <!-- ============================================================= -->
+    <!-- Consultas (abrir hojas de compartir / mapas, etc.) -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
         </intent>
     </queries>
 

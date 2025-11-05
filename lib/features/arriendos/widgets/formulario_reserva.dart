@@ -1,10 +1,6 @@
 // lib/features/arriendos/widgets/formulario_reserva_map.dart
 // ===============================================================
 // 🔹 Formulario de Reserva (versión empresarial)
-// - pensado para arriendos de todo tipo: depto, oficina, vehículo,
-//   bodega, eventos, etc.
-// - recolecta info del solicitante para que la empresa contacte.
-// - mantiene tu ReservaService y tu flujo actual.
 // ===============================================================
 
 import 'dart:convert';
@@ -98,7 +94,7 @@ class _FormularioReservaMapState extends State<FormularioReservaMap> {
       ..writeln('Teléfono: ${_telefonoCtrl.text}')
       ..writeln('Mensaje: ${_mensajeCtrl.text}');
 
-    // 4) además mandamos un "meta" con toda la data (para crecer después)
+    // 4) meta con toda la data
     final meta = {
       "solicitante": {
         "nombre": _nombreCtrl.text.trim(),
@@ -113,7 +109,6 @@ class _FormularioReservaMapState extends State<FormularioReservaMap> {
         "fin": _range!.end.toIso8601String(),
       },
       "observaciones": _mensajeCtrl.text.trim(),
-      // si después agregas auto, cancha, herramientas, puedes meter más aquí
     };
 
     setState(() => _sending = true);
@@ -125,8 +120,6 @@ class _FormularioReservaMapState extends State<FormularioReservaMap> {
         "fecha_fin": _range!.end.toIso8601String(),
         "personas": int.tryParse(_personasCtrl.text) ?? 1,
         "mensaje": mensajeLegible.toString(),
-        // 👇 esto tu backend actual lo va a ignorar si no tiene columna,
-        // pero ya te queda en el body para cuando amplíes la tabla
         "meta": jsonEncode(meta),
       });
 
@@ -224,9 +217,7 @@ class _FormularioReservaMapState extends State<FormularioReservaMap> {
                           keyboardType: TextInputType.number,
                           decoration: const InputDecoration(labelText: 'Pers.'),
                           validator: (v) {
-                            if (v == null || v.isEmpty) {
-                              return 'Req.';
-                            }
+                            if (v == null || v.isEmpty) return 'Req.';
                             return null;
                           },
                         ),
@@ -306,7 +297,7 @@ class _FormularioReservaMapState extends State<FormularioReservaMap> {
                   ),
                   const SizedBox(height: 4),
                   DropdownButtonFormField<String>(
-                    value: _contacto,
+                    initialValue: _contacto, // ✅ reemplaza 'value' (deprecado)
                     items: const [
                       DropdownMenuItem(
                         value: 'WhatsApp',

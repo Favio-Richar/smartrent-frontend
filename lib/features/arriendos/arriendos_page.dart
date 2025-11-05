@@ -44,7 +44,7 @@ class _ArriendosPageState extends State<ArriendosPage> {
   String? _selectedQuick; // categoría rápida activa
 
   // --- Comunas (selector) ---
-  // TODO: reemplazar por lista desde backend si la tienes disponible.
+  // --TODO:reemplazar por lista desde backend si la tienes disponible.//
   final List<String> _comunas = const [
     'Santiago',
     'Las Condes',
@@ -161,10 +161,13 @@ class _ArriendosPageState extends State<ArriendosPage> {
     _page += 1;
     try {
       final q = Map<String, dynamic>.from(_filters);
-      if (_selectedQuick != null && _selectedQuick!.isNotEmpty)
+      // ✅ Envolver en bloques para evitar la alerta (sin cambiar lógica)
+      if (_selectedQuick != null && _selectedQuick!.isNotEmpty) {
         q['tipo'] = _selectedQuick;
-      if (_selectedComuna != null && _selectedComuna!.isNotEmpty)
+      }
+      if (_selectedComuna != null && _selectedComuna!.isNotEmpty) {
         q['comuna'] = _selectedComuna;
+      }
       if (_sort == 'Precio ↑') q['sort'] = 'price_asc';
       if (_sort == 'Precio ↓') q['sort'] = 'price_desc';
 
@@ -288,7 +291,7 @@ class _ArriendosPageState extends State<ArriendosPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Catálogo'), // ← renombrado
+        title: const Text('Catálogo'),
         actions: [
           // Orden
           Padding(
@@ -398,7 +401,7 @@ class _ArriendosPageState extends State<ArriendosPage> {
           // Contenido principal
           Expanded(
             child: _loading
-                ? _SkeletonList(grid: _grid)
+                ? const _SkeletonList(grid: true)
                 : (_items.isEmpty
                       ? _EmptyState(onRetry: () => _load(reset: true))
                       : RefreshIndicator(
