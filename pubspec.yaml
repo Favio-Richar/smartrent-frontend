@@ -1,54 +1,71 @@
 name: smartrent_plus
-description: "Proyecto SmartRent+ completo"
+description: "Proyecto SmartRent+ completo y funcional"
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
-  sdk: '^3.9.0'
+  sdk: ">=3.3.0 <4.0.0"   # rango seguro para Flutter estable
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_localizations:        # necesario para localización
+  flutter_localizations:
     sdk: flutter
 
-  # UI y utilidades
+  # 🧩 UI y utilidades
   cupertino_icons: ^1.0.8
   google_fonts: ^6.3.2
   url_launcher: ^6.3.2
   provider: ^6.0.5
-  intl: ^0.20.2                 # ← actualizado (requerido por flutter_localizations)
-  shared_preferences: ^2.5.3
-
-  # Conexión HTTP
-  http: ^1.5.0
-
-  # Imágenes / caché
+  intl: ^0.20.2
+  shared_preferences: ^2.2.3
   cached_network_image: ^3.3.1
-  image_picker: ^1.2.0
+  image_picker: ^1.0.7
+  path_provider: ^2.1.4
+  share_plus: ^7.2.2
+  file_picker: ^8.1.2
+  permission_handler: ^11.3.1   # ✅ requerido para guardar archivos en /Download
+  font_awesome_flutter: ^10.7.0 # ✅ íconos de contacto (WhatsApp, correo, etc.)
 
-  # Video embebido
-  youtube_player_iframe: ^5.1.2
-  video_player: ^2.8.6
-  chewie: ^1.7.5
-
-  # Mapas y geocodificación
+  # 🌎 Mapas y geocodificación
   flutter_map: ^6.1.0
   latlong2: ^0.9.1
   geocoding: ^2.2.0
-  # (Opcional) si usas Google Maps nativo:
-  google_maps_flutter: ^2.7.0
+  google_maps_flutter: ^2.13.1
 
-  # Importar/Exportar/Compartir
-  file_picker: ^8.1.2
-  share_plus: ^10.0.2
-  path_provider: ^2.1.4
+  # 🎥 Video y multimedia
+  youtube_player_iframe: ^5.1.2
+  video_player: ^2.9.1
+  chewie: ^1.7.5
+  video_thumbnail: ^0.5.6
+
+  # 🌐 HTTP y APIs
+  http: ^1.2.2
+
+  # 📊 Estadísticas, reportes y visualización
+  lottie: ^3.1.0
+  syncfusion_flutter_charts: ^31.2.5
+  pdf: ^3.11.0
+  printing: ^5.12.0
+  open_filex: ^4.7.0
+
+  # 📱 Mejoras adicionales (seguridad y compatibilidad Android/iOS)
+  flutter_svg: ^2.0.10+1        # ✅ para iconos vectoriales y gráficos SVG modernos
+
+  # 💳 Pasarela WebPay (Transbank)
+  webview_flutter: ^4.4.2       # ✅ Permite abrir la URL de pago dentro de la app
+  flutter_inappwebview: ^6.0.0  # ✅ Alternativa avanzada para control total del navegador interno
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^3.0.2
 
 flutter:
   uses-material-design: true
+
+  # 🖼️ Archivos de recursos (assets)
+  assets:
+    - assets/animations/
+    - assets/images/
+    - assets/images/transbank_logo.png

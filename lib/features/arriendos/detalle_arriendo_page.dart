@@ -3,15 +3,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:smartrent_plus/data/services/property_service.dart';
+import 'package:smartrent_plus/core/utils/constants.dart';
 import 'package:smartrent_plus/features/arriendos/widgets/formulario_reserva.dart';
 
-// Media
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 
-// Mapa
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:smartrent_plus/features/arriendos/widgets/video_preview.dart';
 
 class DetalleArriendoPage extends StatefulWidget {
   final String propertyId;
@@ -26,74 +26,107 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
   Map<String, dynamic>? _p;
   bool _loading = true;
 
-  // video
   VideoPlayerController? _v;
   ChewieController? _chewie;
 
-  // -------- helpers básicos --------
   String _s(dynamic v) => (v ?? '').toString();
   num _n(dynamic v) => (v is num) ? v : (num.tryParse(_s(v)) ?? 0);
   bool _has(dynamic v) => _s(v).trim().isNotEmpty;
   bool _isHttp(String u) => u.startsWith('http://') || u.startsWith('https://');
-  bool _isFile(String u) =>
-      u.startsWith('file:/') || (!u.contains('://') && u.isNotEmpty);
+  bool _isFile(String u) => u.startsWith('file:/');
 
   String? _pickVideo(Map<String, dynamic> p) {
-    final list = <dynamic>[
-      p['video_url'], p['videoUrl'],
+    final nv = _s(p['_video']).trim();
+    if (nv.isNotEmpty) return nv;
+
+    final list = <String?>[
+      p['video_url']?.toString(),
+      p['videoUrl']?.toString(),
       (p['videos'] is List && (p['videos'] as List).isNotEmpty)
-          ? (p['videos'] as List).first
+          ? (p['videos'] as List).first.toString()
           : null,
-      // a veces guardan en meta
-      (p['meta'] is String ? jsonDecode(p['meta']) : p['meta'])?['video'],
-      (p['metadata'] is String
-          ? jsonDecode(p['metadata'])
-          : p['metadata'])?['video'],
-    ].map((e) => e?.toString()).where((e) => (e ?? '').isNotEmpty).toList();
-    return list.isEmpty ? null : list.first;
+    ].where((e) => (e ?? '').isNotEmpty).toList();
+
+    if (list.isEmpty) return null;
+    return ApiConstants.media(list.first!);
   }
 
   List<String> _pickImages(Map<String, dynamic> p) {
-    final out = <String>[];
+    final out = <String>{};
+
+    if (p['_images'] is List) {
+      for (final v in (p['_images'] as List)) {
+        final s = _s(v).trim();
+        if (s.isNotEmpty) out.add(s);
+      }
+    }
+
+    final thumb = _s(p['_thumb']).trim();
+    if (thumb.isNotEmpty) out.add(thumb);
+
     void add(dynamic v) {
-      final s = v?.toString() ?? '';
-      if (s.isNotEmpty) out.add(s);
+      final raw = _s(v).trim();
+      if (raw.isEmpty) return;
+      out.add(ApiConstants.media(raw));
     }
 
     add(p['image_url']);
     add(p['imageUrl']);
     add(p['imagen']);
-    if (p['images'] is List) for (final v in (p['images'] as List)) add(v);
-    if (p['media'] is List) for (final v in (p['media'] as List)) add(v);
 
-    // meta/metadata pueden traer arrays
-    final meta = p['meta'] is String ? jsonDecode(p['meta']) : p['meta'];
-    final metadata = p['metadata'] is String
-        ? jsonDecode(p['metadata'])
-        : p['metadata'];
-    for (final m in [meta, metadata]) {
-      if (m is Map && m['images'] is List) {
-        for (final v in (m['images'] as List)) add(v);
+    if (p['images'] is List) {
+      for (final v in (p['images'] as List)) {
+        add(v);
       }
     }
-    return out;
+    if (p['media'] is List) {
+      for (final v in (p['media'] as List)) {
+        add(v);
+      }
+    }
+
+    Map<String, dynamic>? asMap(dynamic v) {
+      if (v is String) {
+        try {
+          final m = jsonDecode(v);
+          if (m is Map) return Map<String, dynamic>.from(m);
+        } catch (_) {}
+      } else if (v is Map) {
+        return Map<String, dynamic>.from(v);
+      }
+      return null;
+    }
+
+    for (final m in [asMap(p['meta']), asMap(p['metadata'])]) {
+      if (m == null) continue;
+      if (m['images'] is List) {
+        for (final v in (m['images'] as List)) {
+          add(v);
+        }
+      }
+      add(m['image']);
+      add(m['image_url']);
+    }
+
+    return out.toList();
   }
 
   Map<String, dynamic> _mergedMeta(Map<String, dynamic> p) {
-    final meta = p['meta'] is String
-        ? (jsonDecode(p['meta']) as Map)
-        : (p['meta'] as Map?);
-    final metadata = p['metadata'] is String
-        ? (jsonDecode(p['metadata']) as Map)
-        : (p['metadata'] as Map?);
-    final extras = p['extras'] is String
-        ? (jsonDecode(p['extras']) as Map)
-        : (p['extras'] as Map?);
-    final out = <String, dynamic>{};
-    for (final m in [meta, metadata, extras]) {
-      if (m is Map) out.addAll(Map<String, dynamic>.from(m));
+    Map<String, dynamic> merge(dynamic v) {
+      if (v is String) {
+        try {
+          final m = jsonDecode(v);
+          if (m is Map) return Map<String, dynamic>.from(m);
+        } catch (_) {}
+      }
+      if (v is Map) return Map<String, dynamic>.from(v);
+      return <String, dynamic>{};
     }
-    return out;
+
+    final meta = merge(p['meta']);
+    final metadata = merge(p['metadata']);
+    final extras = merge(p['extras']);
+    return {...meta, ...metadata, ...extras};
   }
 
   @override
@@ -117,7 +150,7 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
       _loading = false;
 
       final v = _pickVideo(d);
-      if (v != null) {
+      if (v != null && v.isNotEmpty) {
         if (_isHttp(v)) {
           _v = VideoPlayerController.networkUrl(Uri.parse(v));
         } else if (_isFile(v)) {
@@ -140,34 +173,36 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
     }
   }
 
-  // -------- contacto --------
   Future<void> _contactWhatsApp() async {
-    final phoneRaw =
-        _p?['ownerPhone'] ?? _p?['whatsapp'] ?? _p?['contactPhone'];
+    final phoneRaw = _p?['_contactPhone'] ??
+        _p?['ownerPhone'] ??
+        _p?['whatsapp'] ??
+        _p?['contactPhone'];
     final phone = _s(phoneRaw).replaceAll(RegExp(r'[^0-9]+'), '');
     if (phone.isEmpty) return;
     final m = Uri.encodeComponent(
-      'Hola, me interesa: ${_s(_p?['title'] ?? _p?['titulo'])}',
-    );
+        'Hola, me interesa: ${_s(_p?['title'] ?? _p?['titulo'])}');
     final url = 'https://wa.me/$phone?text=$m';
     if (await canLaunchUrlString(url)) {
       await launchUrlString(url, mode: LaunchMode.externalApplication);
     }
   }
 
-  // -------- media widgets --------
   Widget _videoOrGallery() {
     final p = _p!;
     final imgs = _pickImages(p);
 
-    if (_chewie != null) {
-      return AspectRatio(
-        aspectRatio: 16 / 9,
-        child: Chewie(controller: _chewie!),
-      );
-    }
+    // 🔹 Obtener todos los videos correctamente
+    final vids = (p['videos'] is List)
+        ? List<String>.from((p['videos'] as List)
+            .where((e) => e != null && e.toString().trim().isNotEmpty)
+            .map((e) => ApiConstants.media(e)))
+        : (p['videoUrl'] != null ? [ApiConstants.media(p['videoUrl'])] : []);
 
-    if (imgs.isEmpty) {
+    // 🔹 Combinar videos y fotos
+    final media = [...vids, ...imgs].map((e) => e.toString()).toList();
+
+    if (media.isEmpty) {
       return Container(
         height: 220,
         color: const Color(0xFFE9ECF1),
@@ -175,7 +210,8 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
       );
     }
 
-    return _Gallery(images: imgs);
+    // 🔹 Mostrar galería mixta (fotos + videos)
+    return _GalleryMixed(items: media);
   }
 
   bool get _hasLatLng {
@@ -191,8 +227,7 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
     }
     if (_p == null) {
       return const Scaffold(
-        body: Center(child: Text('Publicación no encontrada')),
-      );
+          body: Center(child: Text('Publicación no encontrada')));
     }
 
     final p = _p!;
@@ -201,51 +236,49 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
     final direccion = _s(p['address'] ?? p['direccion']);
     final ubic = _s(p['location'] ?? p['ubicacion'] ?? p['comuna']);
     final tipo = _s(p['type'] ?? p['tipo']).toLowerCase();
-    final esVehiculo =
-        tipo.contains('vehic') ||
+    final esVehiculo = tipo.contains('vehic') ||
         tipo.contains('auto') ||
         tipo.contains('moto');
     final esInmueble = !esVehiculo;
 
-    // meta/metadata/extra combinados
     final meta = _mergedMeta(p);
 
-    // amenities / servicios / características
     final amenities = <String>{
-      ...(_toStringList(p['amenities'])),
-      ...(_toStringList(p['servicios'])),
-      ...(_toStringList(p['features'])),
-      ...(_toStringList(meta['amenities'])),
-      ...(_toStringList(meta['servicios'])),
-      ...(_toStringList(meta['features'])),
+      ..._toStringList(p['amenities']),
+      ..._toStringList(p['servicios']),
+      ..._toStringList(p['features']),
+      ..._toStringList(meta['amenities']),
+      ..._toStringList(meta['servicios']),
+      ..._toStringList(meta['features']),
     }.toList();
 
-    // costos/condiciones/horarios/reglas
-    final precioPeriodo = _s(
-      p['precio_periodo'] ?? meta['precio_periodo'] ?? meta['periodo'],
-    );
+    final precioPeriodo =
+        _s(p['precio_periodo'] ?? meta['precio_periodo'] ?? meta['periodo']);
     final garantia = _s(
-      p['garantia'] ?? p['deposito'] ?? meta['garantia'] ?? meta['deposito'],
-    );
+        p['garantia'] ?? p['deposito'] ?? meta['garantia'] ?? meta['deposito']);
     final costosExtra = _s(p['costos_extra'] ?? meta['costos_extra']);
     final hInicio = _s(p['horario_inicio'] ?? meta['horario_inicio']);
     final hFin = _s(p['horario_fin'] ?? meta['horario_fin']);
-    final reglas = _s(
-      p['reglas'] ?? meta['reglas'] ?? p['normas'] ?? meta['normas'],
-    );
+    final reglas =
+        _s(p['reglas'] ?? meta['reglas'] ?? p['normas'] ?? meta['normas']);
     final politicas = _s(p['politicas'] ?? meta['politicas']);
 
-    // contacto
-    final empresa = _s(p['companyName'] ?? p['empresa'] ?? meta['companyName']);
-    final contacto = _s(p['contactName'] ?? meta['contactName']);
+    final empresa = _s(p['_companyName'] ??
+        p['companyName'] ??
+        p['empresa'] ??
+        meta['companyName']);
+    final contacto =
+        _s(p['_contactName'] ?? p['contactName'] ?? meta['contactName']);
     final fono = _s(
-      p['contactPhone'] ??
+      p['_contactPhone'] ??
+          p['contactPhone'] ??
           p['whatsapp'] ??
           meta['contactPhone'] ??
           meta['whatsapp'],
     );
-    final email = _s(p['contactEmail'] ?? meta['contactEmail']);
-    final web = _s(p['website'] ?? meta['website']);
+    final email =
+        _s(p['_contactEmail'] ?? p['contactEmail'] ?? meta['contactEmail']);
+    final web = _s(p['_website'] ?? p['website'] ?? meta['website']);
 
     return Scaffold(
       appBar: AppBar(title: Text(titulo)),
@@ -262,39 +295,26 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: _videoOrGallery(),
-            ),
+                borderRadius: BorderRadius.circular(12),
+                child: _videoOrGallery()),
             const SizedBox(height: 12),
-
             if (_has(precio))
               Text(
                 '$precio CLP / mes',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
             if (_has(ubic))
               Text(ubic, style: TextStyle(color: Colors.grey[700])),
             if (_has(direccion))
               Text(direccion, style: TextStyle(color: Colors.grey[600])),
             const Divider(height: 24),
-
-            // descripción
             if (_has(p['description'] ?? p['descripcion']))
-              Text(
-                _s(p['description'] ?? p['descripcion']),
-                textAlign: TextAlign.justify,
-              ),
-
+              Text(_s(p['description'] ?? p['descripcion']),
+                  textAlign: TextAlign.justify),
             const SizedBox(height: 16),
-
-            // ---------- ESPECIFICACIONES ----------
-            Text(
-              'Especificaciones',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Especificaciones',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -302,80 +322,57 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
               children: [
                 if (esInmueble && _n(p['area']) > 0)
                   _ChipInfo(
-                    icon: Icons.square_foot,
-                    label: '${_n(p["area"])} m²',
-                  ),
+                      icon: Icons.square_foot, label: '${_n(p["area"])} m²'),
                 if (esInmueble && _n(p['bedrooms'] ?? p['dormitorios']) > 0)
                   _ChipInfo(
-                    icon: Icons.bed,
-                    label: '${_n(p["bedrooms"] ?? p["dormitorios"])} dorm',
-                  ),
+                      icon: Icons.bed,
+                      label: '${_n(p["bedrooms"] ?? p["dormitorios"])} dorm'),
                 if (esInmueble && _n(p['bathrooms'] ?? p['banos']) > 0)
                   _ChipInfo(
-                    icon: Icons.shower,
-                    label: '${_n(p["bathrooms"] ?? p["banos"])} baños',
-                  ),
+                      icon: Icons.shower,
+                      label: '${_n(p["bathrooms"] ?? p["banos"])} baños'),
                 if (p['year'] != null)
                   _ChipInfo(
-                    icon: Icons.calendar_month,
-                    label: 'Año ${_s(p["year"])}',
-                  ),
-
-                // Vehículos
+                      icon: Icons.calendar_month,
+                      label: 'Año ${_s(p["year"])}'),
                 if (esVehiculo && _has(p['brand'] ?? p['marca']))
                   _ChipInfo(
-                    icon: Icons.directions_car_filled,
-                    label: _s(p['brand'] ?? p['marca']),
-                  ),
+                      icon: Icons.directions_car_filled,
+                      label: _s(p['brand'] ?? p['marca'])),
                 if (esVehiculo && _has(p['model'] ?? p['modelo']))
                   _ChipInfo(
-                    icon: Icons.badge,
-                    label: _s(p['model'] ?? p['modelo']),
-                  ),
+                      icon: Icons.badge, label: _s(p['model'] ?? p['modelo'])),
                 if (esVehiculo && _has(p['fuel'] ?? p['combustible']))
                   _ChipInfo(
-                    icon: Icons.local_gas_station,
-                    label: _s(p['fuel'] ?? p['combustible']),
-                  ),
+                      icon: Icons.local_gas_station,
+                      label: _s(p['fuel'] ?? p['combustible'])),
                 if (esVehiculo && _has(p['transmission'] ?? p['transmision']))
                   _ChipInfo(
-                    icon: Icons.settings,
-                    label: _s(p['transmission'] ?? p['transmision']),
-                  ),
+                      icon: Icons.settings,
+                      label: _s(p['transmission'] ?? p['transmision'])),
                 if (esVehiculo && _n(p['seats'] ?? p['asientos']) > 0)
                   _ChipInfo(
-                    icon: Icons.event_seat,
-                    label: '${_n(p["seats"] ?? p["asientos"])} asientos',
-                  ),
-
-                // Campos comunes desde meta
+                      icon: Icons.event_seat,
+                      label: '${_n(p["seats"] ?? p["asientos"])} asientos'),
                 if (_n(meta['capacidad']) > 0)
                   _ChipInfo(
-                    icon: Icons.groups,
-                    label: 'Capacidad ${_n(meta["capacidad"])}',
-                  ),
+                      icon: Icons.groups,
+                      label: 'Capacidad ${_n(meta["capacidad"])}'),
                 if (_has(meta['deporte']))
                   _ChipInfo(icon: Icons.sports, label: _s(meta['deporte'])),
                 if (_has(meta['superficie']))
                   _ChipInfo(icon: Icons.texture, label: _s(meta['superficie'])),
                 if (_has(meta['iluminacion']))
                   _ChipInfo(
-                    icon: Icons.light_mode,
-                    label: _s(meta['iluminacion']),
-                  ),
+                      icon: Icons.light_mode, label: _s(meta['iluminacion'])),
                 if (_has(meta['categoria']))
                   _ChipInfo(icon: Icons.category, label: _s(meta['categoria'])),
               ],
             ),
-
             const SizedBox(height: 16),
-
-            // ---------- AMENITIES / SERVICIOS ----------
             if (amenities.isNotEmpty) ...[
-              Text(
-                'Servicios y características',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Servicios y características',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -384,56 +381,39 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
               ),
               const SizedBox(height: 16),
             ],
-
-            // ---------- COSTOS / CONDICIONES ----------
             if (_has(precioPeriodo) || _has(garantia) || _has(costosExtra)) ...[
-              Text(
-                'Condiciones',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Condiciones',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (_has(precioPeriodo))
                 _InfoRow(icon: Icons.schedule, text: 'Periodo: $precioPeriodo'),
               if (_has(garantia))
                 _InfoRow(
-                  icon: Icons.security,
-                  text: 'Garantía/Depósito: $garantia',
-                ),
+                    icon: Icons.security, text: 'Garantía/Depósito: $garantia'),
               if (_has(costosExtra))
                 _InfoRow(
-                  icon: Icons.price_change,
-                  text: 'Costos extra: $costosExtra',
-                ),
+                    icon: Icons.price_change,
+                    text: 'Costos extra: $costosExtra'),
               const SizedBox(height: 16),
             ],
-
-            // ---------- HORARIOS ----------
             if (_has(hInicio) || _has(hFin)) ...[
               Text('Horarios', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               _InfoRow(
                 icon: Icons.access_time,
                 text:
-                    '${_has(hInicio) ? 'Inicio: $hInicio' : ''}'
-                    '${_has(hInicio) && _has(hFin) ? ' · ' : ''}'
-                    '${_has(hFin) ? 'Fin: $hFin' : ''}',
+                    '${_has(hInicio) ? 'Inicio: $hInicio' : ''}${_has(hInicio) && _has(hFin) ? ' · ' : ''}${_has(hFin) ? 'Fin: $hFin' : ''}',
               ),
               const SizedBox(height: 16),
             ],
-
-            // ---------- REGLAS / POLÍTICAS ----------
             if (_has(reglas) || _has(politicas)) ...[
-              Text(
-                'Reglas y políticas',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+              Text('Reglas y políticas',
+                  style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
               if (_has(reglas)) _BulletText(text: reglas),
               if (_has(politicas)) _BulletText(text: politicas),
               const SizedBox(height: 16),
             ],
-
-            // ---------- MAPA ----------
             if (_hasLatLng) ...[
               Text('Ubicación', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
@@ -445,14 +425,12 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
                     options: MapOptions(
                       initialCenter: LatLng(
                         _n(_p!['latitude'] ?? _p!['lat']).toDouble(),
-                        _n(
-                          _p!['longitude'] ?? _p!['lng'] ?? _p!['lon'],
-                        ).toDouble(),
+                        _n(_p!['longitude'] ?? _p!['lng'] ?? _p!['lon'])
+                            .toDouble(),
                       ),
                       initialZoom: 15,
                       interactionOptions: const InteractionOptions(
-                        flags: ~InteractiveFlag.rotate,
-                      ),
+                          flags: ~InteractiveFlag.rotate),
                     ),
                     children: [
                       TileLayer(
@@ -465,17 +443,13 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
                           Marker(
                             point: LatLng(
                               _n(_p!['latitude'] ?? _p!['lat']).toDouble(),
-                              _n(
-                                _p!['longitude'] ?? _p!['lng'] ?? _p!['lon'],
-                              ).toDouble(),
+                              _n(_p!['longitude'] ?? _p!['lng'] ?? _p!['lon'])
+                                  .toDouble(),
                             ),
                             width: 40,
                             height: 40,
-                            child: const Icon(
-                              Icons.location_pin,
-                              color: Colors.red,
-                              size: 40,
-                            ),
+                            child: const Icon(Icons.location_pin,
+                                color: Colors.red, size: 40),
                           ),
                         ],
                       ),
@@ -497,12 +471,8 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
               ),
               const SizedBox(height: 16),
             ],
-
-            // ---------- CONTACTO ----------
-            Text(
-              'Contacto del anunciante',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Contacto del anunciante',
+                style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             if (_has(empresa)) _InfoRow(icon: Icons.business, text: empresa),
             if (_has(contacto)) _InfoRow(icon: Icons.person, text: contacto),
@@ -518,10 +488,7 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
                     launchUrlString(web, mode: LaunchMode.externalApplication),
                 child: _InfoRow(icon: Icons.link, text: web),
               ),
-
             const SizedBox(height: 16),
-
-            // ---------- CTA RESERVA ----------
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -547,7 +514,6 @@ class _DetalleArriendoPageState extends State<DetalleArriendoPage> {
       return v.map((e) => _s(e)).where((e) => e.isNotEmpty).toList();
     }
     if (v is String && v.trim().isNotEmpty) {
-      // permitir "wifi,estacionamiento,mascotas"
       return v
           .split(RegExp(r'[;,]'))
           .map((e) => e.trim())
@@ -631,8 +597,7 @@ class _GalleryState extends State<_Gallery> {
   int _i = 0;
 
   bool _isHttp(String u) => u.startsWith('http://') || u.startsWith('https://');
-  bool _isFile(String u) =>
-      u.startsWith('file:/') || (!u.contains('://') && u.isNotEmpty);
+  bool _isFile(String u) => u.startsWith('file:/');
 
   @override
   Widget build(BuildContext context) {
@@ -646,21 +611,15 @@ class _GalleryState extends State<_Gallery> {
             itemBuilder: (_, idx) {
               final url = widget.images[idx];
               if (_isHttp(url)) {
-                return Image.network(
-                  url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _ph(),
-                );
+                return Image.network(url,
+                    fit: BoxFit.cover, errorBuilder: (_, __, ___) => _ph());
               }
               if (_isFile(url)) {
                 final path = url.startsWith('file:/')
                     ? Uri.parse(url).toFilePath()
                     : url;
-                return Image.file(
-                  File(path),
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => _ph(),
-                );
+                return Image.file(File(path),
+                    fit: BoxFit.cover, errorBuilder: (_, __, ___) => _ph());
               }
               return _ph();
             },
@@ -687,7 +646,114 @@ class _GalleryState extends State<_Gallery> {
   }
 
   Widget _ph() => Container(
-    color: const Color(0xFFE9ECF1),
-    child: const Icon(Icons.broken_image_outlined),
-  );
+      color: const Color(0xFFE9ECF1),
+      child: const Icon(Icons.broken_image_outlined));
+}
+
+// ===============================================================
+// Galería Mixta SmartRent+ (fotos + videos con contador)
+// ===============================================================
+// ===============================================================
+// 🎥 GALERÍA MIXTA COMPLETA (fotos + videos integrados)
+// ---------------------------------------------------------------
+// ✅ Muestra todas las imágenes y videos juntos en carrusel.
+// ✅ Usa VideoPreview (inicializado correctamente).
+// ✅ Indica la posición (ej. 3/12).
+// ✅ Compatible con URLs locales y HTTP.
+// ===============================================================
+class _GalleryMixed extends StatefulWidget {
+  final List<String> items;
+  const _GalleryMixed({required this.items});
+
+  @override
+  State<_GalleryMixed> createState() => _GalleryMixedState();
+}
+
+class _GalleryMixedState extends State<_GalleryMixed> {
+  int _i = 0;
+
+  bool _isVideo(String url) {
+    final u = url.toLowerCase();
+    return u.endsWith('.mp4') ||
+        u.contains('/video/') ||
+        u.contains('youtube.com') ||
+        u.contains('youtu.be');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final media = widget.items;
+    if (media.isEmpty) {
+      return Container(
+        height: 220,
+        color: const Color(0xFFE9ECF1),
+        child: const Icon(Icons.image_not_supported, size: 48),
+      );
+    }
+
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        AspectRatio(
+          aspectRatio: 16 / 9,
+          child: PageView.builder(
+            itemCount: media.length,
+            onPageChanged: (v) => setState(() => _i = v),
+            itemBuilder: (_, idx) {
+              final url = media[idx];
+              final isVid = _isVideo(url);
+
+              if (isVid) {
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    // 🔹 Usa tu VideoPreview (ya inicializa Chewie correctamente)
+                    VideoPreview(videoUrl: url),
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(Icons.videocam, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              // 🔹 Mostrar imagen normal
+              return Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _ph(),
+              );
+            },
+          ),
+        ),
+        Positioned(
+          bottom: 8,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '${_i + 1}/${media.length}',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _ph() => Container(
+        color: const Color(0xFFE9ECF1),
+        child: const Icon(Icons.broken_image_outlined),
+      );
 }

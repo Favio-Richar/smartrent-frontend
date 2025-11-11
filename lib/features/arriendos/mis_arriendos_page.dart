@@ -156,9 +156,8 @@ class _MisArriendosPageState extends State<MisArriendosPage> {
     if (_query.trim().isNotEmpty) {
       final q = _query.toLowerCase();
       list = list.where((p) {
-        final title = (p['titulo'] ?? p['title'] ?? '')
-            .toString()
-            .toLowerCase();
+        final title =
+            (p['titulo'] ?? p['title'] ?? '').toString().toLowerCase();
         final desc = (p['descripcion'] ?? p['description'] ?? '')
             .toString()
             .toLowerCase();
@@ -661,10 +660,10 @@ class _PropertyTile extends StatelessWidget {
                 status == 'published'
                     ? 'Publicado'
                     : status == 'paused'
-                    ? 'Pausado'
-                    : status == 'draft'
-                    ? 'Borrador'
-                    : status,
+                        ? 'Pausado'
+                        : status == 'draft'
+                            ? 'Borrador'
+                            : status,
                 style: TextStyle(color: badgeColor(status), fontSize: 12),
               ),
             ),

@@ -55,8 +55,7 @@ class PropertyCarousel extends StatelessWidget {
         itemBuilder: (context, i) {
           final item = listado[i];
           return _CardItem(
-            image:
-                item['image_url'] ??
+            image: item['image_url'] ??
                 'https://cdn-icons-png.flaticon.com/512/869/869636.png',
             title: item['title'] ?? 'Propiedad',
             subtitle: item['price'] != null

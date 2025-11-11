@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <cache-path name="cache" path="."/>
-    <files-path name="files" path="."/>
-    <external-cache-path name="external_cache" path="."/>
-    <external-files-path name="external_files" path="."/>
+
+    <!-- 🗂️ Cache interna de la app -->
+    <cache-path name="cache" path="." />
+    <files-path name="files" path="." />
+
+    <!-- 🗂️ Cache externa (temporal) -->
+    <external-cache-path name="external_cache" path="." />
+    <external-files-path name="external_files" path="." />
+
+    <!-- 📁 Carpeta pública /Download/SmartRent+ -->
+    <external-path name="external_downloads" path="Download/SmartRent+" />
+
 </paths>

@@ -1,3 +1,11 @@
+// ===============================================================
+// 🔹 AUTH SERVICE – SmartRent+ (versión final corregida)
+// ---------------------------------------------------------------
+// - Mantiene compatibilidad completa con tu backend actual
+// - Guarda correctamente userId, token y tipoCuenta
+// - Incluye logs detallados para depuración
+// ===============================================================
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -64,18 +72,33 @@ class AuthService {
 
     if (last['ok'] == true) {
       final token = (data?['access_token'] ?? data?['token'] ?? '') as String;
-      final user =
-          (data?['user'] ?? data?['data']?['user'] ?? {})
-              as Map<String, dynamic>;
+      final user = (data?['user'] ?? data?['data']?['user'] ?? {})
+          as Map<String, dynamic>;
       if (token.isEmpty || user.isEmpty) return false;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', token);
-      if (user['id'] is int) await prefs.setInt('userId', user['id'] as int);
+
+      // ✅ CORREGIDO: se asegura de guardar siempre el ID del usuario
+      final dynamic userId = user['id'] ?? user['userId'] ?? user['uid'];
+      if (userId != null) {
+        await prefs.setInt('userId', int.tryParse(userId.toString()) ?? 0);
+        if (kDebugMode) debugPrint('🧩 userId guardado: $userId');
+      } else {
+        debugPrint('⚠️ userId no encontrado en la respuesta del backend');
+      }
+
+      // ✅ Guarda el tipo de cuenta
       await prefs.setString(
         'userRole',
         (user['tipoCuenta'] ?? user['role'] ?? 'Usuario').toString(),
       );
+
+      if (kDebugMode) {
+        debugPrint('✅ Token guardado correctamente');
+        debugPrint('👤 Usuario logueado: ${user['nombre'] ?? user['email']}');
+      }
+
       return true;
     }
 
@@ -125,8 +148,7 @@ class AuthService {
   }
 
   // ============================================================
-  // RECUPERAR CONTRASEÑA (solicitar token)
-  // Devuelve (ok, tokenOrMsg). En dev el backend retorna dev_token.
+  // RECUPERAR CONTRASEÑA
   // ============================================================
   static Future<(bool ok, String tokenOrMsg)> forgotPassword(
     String email,
@@ -149,20 +171,19 @@ class AuthService {
     final body = (last['body'] ?? {}) as Map<String, dynamic>;
 
     if (ok) {
-      // En modo dev el backend retorna dev_token
       final token =
           (body['dev_token'] ?? body['reset_token'] ?? body['token'] ?? '')
               .toString();
       return (true, token.isNotEmpty ? token : 'Enviado');
     }
 
-    final msg = (body['message'] ?? 'Error al solicitar recuperación')
-        .toString();
+    final msg =
+        (body['message'] ?? 'Error al solicitar recuperación').toString();
     return (false, msg);
   }
 
   // ============================================================
-  // RESETEAR CONTRASEÑA (usar token/código)
+  // RESETEAR CONTRASEÑA
   // ============================================================
   static Future<(bool ok, String msg)> resetPassword({
     required String email,
@@ -179,10 +200,6 @@ class AuthService {
 
     Map<String, dynamic>? last;
     for (final u in urls) {
-      // Enviamos ambas claves por compatibilidad:
-      // - code (lo que el backend espera)
-      // - token (por si el backend también lo lee)
-      // - newPassword y, por compatibilidad, password/contrasena
       last = await _postJson(u, {
         'email': email,
         'correo': email,
@@ -222,4 +239,3 @@ class AuthService {
     return {'id': id, 'role': role, 'token': token};
   }
 }
-

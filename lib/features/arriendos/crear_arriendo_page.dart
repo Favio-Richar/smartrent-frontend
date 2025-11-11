@@ -1,7 +1,14 @@
 // lib/features/arriendos/crear_arriendo_page.dart
 // ===============================================================
 // SmartRent+ · Crear/Editar Arriendo (vista empresarial)
+// Mantiene contratos/rutas. Incluye políticas dinámicas, preview video,
+// geocodificación y mapa (flutter_map v6: TileLayer sin const).
+// Fixes:
+// - Guardado usa PropertyService.create/update con images (sin *Multipart*).
+// - Geocoding robusto, preview video (YouTube/MP4/local).
+// - Quita localeIdentifier (error undefined_named_parameter) y limpia cast.
 // ===============================================================
+import 'package:smartrent_plus/data/services/uploads_service.dart';
 
 import 'dart:convert';
 import 'dart:io';
@@ -17,7 +24,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-// ====== NUEVOS IMPORTS (media/mapa) ======
+// ====== MEDIA / MAPA ======
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 import 'package:video_player/video_player.dart';
@@ -39,11 +46,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   final _form = GlobalKey<FormState>();
   final _svc = PropertyService();
 
-  // -------------------- Paso actual (Stepper) --------------------
   int _currentStep = 0;
   late final _stepperCtrl = PageController();
 
-  // -------------------- Catálogo fijo de tipos -------------------
   static const List<String> _typesAll = [
     'propiedad',
     'vehiculo',
@@ -54,7 +59,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     'terreno',
   ];
 
-  // Categorías por tipo (puedes ampliar desde backend)
   static const Map<String, List<String>> _categorySuggestions = {
     'propiedad': [
       'Departamento',
@@ -72,7 +76,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     'terreno': ['Residencial', 'Comercial', 'Industrial', 'Agrícola'],
   };
 
-  // -------------------- Controllers --------------------
   // Básico
   final _title = TextEditingController();
   final _price = TextEditingController();
@@ -104,7 +107,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
 
   final _destacado = ValueNotifier<bool>(false);
 
-  // Políticas / servicios
+  // Políticas / servicios base
   final _deposito = TextEditingController();
   final _contratoMeses = TextEditingController();
   final _mascotas = ValueNotifier<bool>(false);
@@ -114,22 +117,52 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   final _incGas = ValueNotifier<bool>(false);
   final _incInternet = ValueNotifier<bool>(false);
 
+  // ====== NUEVO: requisitos extra ======
+  final _reqOtros = TextEditingController();
+  final _diasMin = TextEditingController();
+  final _politicaCancel = TextEditingController();
+  final _reqSelected = ValueNotifier<Set<String>>({});
+
+  static const List<String> _reqUniversales = [
+    'Documento de identidad (RUT/ID)',
+    'Comprobante de domicilio',
+    'Medio de pago verificado',
+    'Firma de contrato',
+  ];
+  static const Map<String, List<String>> _reqPorTipo = {
+    'vehiculo': [
+      'Licencia de conducir vigente',
+      'Edad mínima 21+',
+      'Garantía reembolsable',
+      'Sin multas/partes pendientes',
+    ],
+    'herramienta': [
+      'Garantía reembolsable',
+      'Experiencia/uso responsable',
+      'Devolución en buen estado',
+    ],
+    'propiedad': [
+      'Informe comercial (opcional)',
+      'Renta comprobable',
+      'Mes de garantía',
+    ],
+    'oficina': ['RUT empresa / Giro', 'Contrato mínimo 3 meses'],
+    'cancha': ['Pago anticipado', 'Respeto a normas del recinto'],
+    'piscina': ['Pago anticipado', 'Respeto a normas de seguridad'],
+    'terreno': ['Uso permitido según zonificación', 'Garantía reembolsable'],
+  };
+
   // Media
   final List<File> _images = [];
   String? _remoteImage;
-
-  // ====== NUEVO: video local seleccionado/grabado ======
   File? _localVideo;
 
-  // Catálogos
   List<String> _tipos = const [];
   List<String> _comunas = const [];
 
-  // Estado
   bool _saving = false;
   bool _loadingData = true;
 
-  // -------------------- Detalles por tipo (metadata) --------------------
   // Vehículo
   final _vehMarca = TextEditingController();
   final _vehModelo = TextEditingController();
@@ -169,7 +202,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   final _ofiSalas = TextEditingController();
   final _ofiEstacionamientos = TextEditingController();
 
-  // ====== NUEVO: punto de mapa ======
+  // Mapa
   LatLng? _point;
 
   @override
@@ -177,13 +210,11 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     super.initState();
     _boot();
 
-    // Cuando cambia el tipo, vaciamos la categoría para forzar nueva selección.
     _type.addListener(() {
       _category.clear();
-      setState(() {}); // fuerza rebuild para actualizar sugerencias
+      setState(() {});
     });
 
-    // ====== NUEVO: listeners para refrescar video/mapa ======
     _videoUrl.addListener(() => setState(() {}));
     _lat.addListener(() => _syncPointFromLatLng());
     _lng.addListener(() => _syncPointFromLatLng());
@@ -192,9 +223,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   Future<void> _boot() async {
     try {
       final results = await Future.wait([_svc.getTipos(), _svc.getComunas()]);
-      final back = (results[0] as List?)?.cast<String>() ?? [];
-      _tipos = {..._typesAll, ...back.map((e) => e.toLowerCase())}.toList();
-      _comunas = results[1];
+      final list0 = (results[0] as List?) ?? const [];
+      final back = list0.map((e) => '$e'.toLowerCase()).toList();
+      _tipos = {..._typesAll, ...back}.toList();
+      _comunas = (results[1] as List).map((e) => '$e').toList();
       if (widget.editId != null) await _loadEdit();
     } catch (_) {
       _tipos = List.from(_typesAll);
@@ -243,12 +275,14 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   }
 
   void _hydrateMeta(Map meta) {
+    // Vehículo
     _vehMarca.text = _s(meta['veh_marca']);
     _vehModelo.text = _s(meta['veh_modelo']);
     _vehKm.text = _s(meta['veh_km']);
     _vehTransmision.value = meta['veh_transmision'] ?? _vehTransmision.value;
     _vehCombustible.value = meta['veh_combustible'] ?? _vehCombustible.value;
 
+    // Cancha
     _canchaDeporte.value = meta['cancha_deporte'] ?? _canchaDeporte.value;
     _canchaSuperficie.value =
         meta['cancha_superficie'] ?? _canchaSuperficie.value;
@@ -259,6 +293,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     _canchaCapacidad.text = _s(meta['cancha_capacidad']);
     _canchaHorario.text = _s(meta['cancha_horario']);
 
+    // Piscina
     _piscinaLargo.text = _s(meta['pisc_largo']);
     _piscinaAncho.text = _s(meta['pisc_ancho']);
     _piscinaProfundidad.text = _s(meta['pisc_prof']);
@@ -267,20 +302,24 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     _piscinaInterior.value =
         (meta['pisc_inter'] ?? _piscinaInterior.value) == true;
 
+    // Herramienta
     _herrNombre.text = _s(meta['herr_nombre']);
     _herrCondicion.value = meta['herr_cond'] ?? _herrCondicion.value;
     _herrGarantia.text = _s(meta['herr_garantia']);
     _herrEntrega.value = meta['herr_entrega'] ?? _herrEntrega.value;
 
+    // Terreno
     _terrUso.value = meta['terr_uso'] ?? _terrUso.value;
     _terrAgua.value = (meta['terr_agua'] ?? _terrAgua.value) == true;
     _terrLuz.value = (meta['terr_luz'] ?? _terrLuz.value) == true;
 
+    // Oficina
     _ofiM2.text = _s(meta['ofi_m2']);
     _ofiAmoblada.value = (meta['ofi_amobl'] ?? _ofiAmoblada.value) == true;
     _ofiSalas.text = _s(meta['ofi_salas']);
     _ofiEstacionamientos.text = _s(meta['ofi_est']);
 
+    // Base políticas
     _deposito.text = _s(meta['dep_monto']);
     _contratoMeses.text = _s(meta['contrato_meses']);
     _mascotas.value = (meta['mascotas'] ?? false) == true;
@@ -289,6 +328,13 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     _incLuz.value = (meta['inc_luz'] ?? false) == true;
     _incGas.value = (meta['inc_gas'] ?? false) == true;
     _incInternet.value = (meta['inc_internet'] ?? false) == true;
+
+    // Requisitos extra
+    final reqList = (meta['req'] as List?)?.map((e) => '$e').toSet() ?? {};
+    _reqSelected.value = reqList;
+    _reqOtros.text = _s(meta['req_otros']);
+    _diasMin.text = _s(meta['dias_min']);
+    _politicaCancel.text = _s(meta['politica_cancel']);
   }
 
   Map<String, dynamic> _collectMetadata() {
@@ -302,6 +348,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
       'inc_luz': _incLuz.value,
       'inc_gas': _incGas.value,
       'inc_internet': _incInternet.value,
+      'req': _reqSelected.value.isEmpty ? null : _reqSelected.value.toList(),
+      'req_otros': _optText(_reqOtros),
+      'dias_min': NumberUtils.toIntSafe(_diasMin.text),
+      'politica_cancel': _optText(_politicaCancel),
     };
 
     switch (_type.value) {
@@ -471,7 +521,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                 alignment: Alignment.centerLeft,
                 child: Text(_desc.text.trim()),
               ),
-              // ====== NUEVO: preview de video también en previsualización ======
               if (_videoUrl.text.trim().isNotEmpty || _localVideo != null) ...[
                 const SizedBox(height: 12),
                 _videoPreview(_videoUrl.text.trim()),
@@ -499,9 +548,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
       "bedrooms": NumberUtils.toIntSafe(_beds.text),
       "bathrooms": NumberUtils.toIntSafe(_baths.text),
       "year": NumberUtils.toIntSafe(_year.text),
-      "video_url": _optText(
-        _videoUrl,
-      ), // (si subes video archivo, extender svc)
+      "video_url": _optText(_videoUrl),
       "featured": _destacado.value,
       "companyName": _optText(_companyName),
       "contactName": _optText(_contactName),
@@ -509,6 +556,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
       "email": _optText(_contactEmail),
       "website": _optText(_website),
       "whatsapp": _optText(_whatsapp),
+      // Si no adjuntas archivos y tienes URL remota, irá como image_url.
+      "image_url": (_remoteImage?.isNotEmpty ?? false) && _images.isEmpty
+          ? _remoteImage
+          : null,
       "metadata": {
         ..._collectMetadata(),
         "street": _optText(_street),
@@ -517,7 +568,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
             : null,
         "wa_link": _waLink().isEmpty ? null : _waLink(),
       }..removeWhere((k, v) => v == null || (v is String && v.isEmpty)),
-    };
+    }..removeWhere((k, v) => v == null);
   }
 
   // -------------------- Importar / Exportar --------------------
@@ -582,7 +633,8 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     ).showSnackBar(const SnackBar(content: Text('Ficha importada')));
   }
 
-  // -------------------- Guardar --------------------
+  // -------------------- Guardar (CORREGIDO) --------------------
+// -------------------- Guardar (CORREGIDO con video) --------------------
   Future<void> _submit() async {
     if (!_form.currentState!.validate()) {
       setState(() {});
@@ -592,22 +644,28 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     setState(() => _saving = true);
     try {
       final editing = widget.editId != null;
+
+      // ✅ Subida del video si hay uno local
+      if (_localVideo != null) {
+        try {
+          final uploadedUrl = await UploadsService.uploadVideo(_localVideo!);
+          _videoUrl.text = uploadedUrl; // guarda la URL generada por el backend
+        } catch (e) {
+          debugPrint('Error al subir video: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Error al subir el video')),
+            );
+          }
+        }
+      }
+
       final payload = await _buildPayload();
 
-      if (_remoteImage != null && _remoteImage!.isNotEmpty && _images.isEmpty) {
-        payload["image_url"] = _remoteImage;
-      }
-
-      final bool ok;
-      if (_images.isNotEmpty) {
-        ok = editing
-            ? await _svc.updateMultipart(widget.editId!, payload, _images)
-            : await _svc.createMultipart(payload, _images);
-      } else {
-        ok = editing
-            ? await _svc.update(widget.editId!, payload)
-            : await _svc.create(payload);
-      }
+      // ✅ Usa los métodos reales del servicio que ya manejan JSON/multipart
+      final bool ok = editing
+          ? await _svc.update(widget.editId!, payload, images: _images)
+          : await _svc.create(payload, images: _images);
 
       if (!mounted) return;
       if (ok) {
@@ -750,7 +808,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                 ),
               ),
               const SizedBox(height: 16),
-
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
@@ -781,7 +838,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                 ),
               ),
               const SizedBox(height: 12),
-
               ValueListenableBuilder<String>(
                 valueListenable: _type,
                 builder: (_, currentType, __) {
@@ -818,7 +874,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                   labelText: 'Calle y número',
                   prefixIcon: Icon(Icons.location_on_outlined),
                 ),
-                onChanged: (_) {},
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -869,8 +924,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                 ],
               ),
               const SizedBox(height: 12),
-
-              // ====== NUEVO: Geocodificar y mapa ======
               Row(
                 children: [
                   OutlinedButton.icon(
@@ -975,8 +1028,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                     ),
                   ),
                   const SizedBox(height: 8),
-
-                  // ====== NUEVO: acciones de video (grabar / subir / quitar) ======
                   Row(
                     children: [
                       OutlinedButton.icon(
@@ -1000,9 +1051,7 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
                         ),
                     ],
                   ),
-
                   const SizedBox(height: 8),
-                  // ====== NUEVO: preview de video en el formulario ======
                   _videoPreview(_videoUrl.text),
                   const SizedBox(height: 6),
                   ValueListenableBuilder(
@@ -1023,81 +1072,175 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     );
   }
 
+  // ======================= POLÍTICAS DINÁMICAS =======================
   Widget _stepPoliticas() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        _SectionCard(
-          title: 'Políticas y servicios',
-          child: Column(
-            children: [
-              Row(
+    return ValueListenableBuilder<String>(
+      valueListenable: _type,
+      builder: (_, t, __) {
+        final esProp = (t == 'propiedad' || t == 'oficina');
+        final esVeh = t == 'vehiculo';
+        final esHerr = t == 'herramienta';
+
+        final labelDeposito =
+            (esHerr || esVeh) ? 'Garantía (CLP)' : 'Depósito (CLP)';
+        final showContratoMeses = esProp;
+        final showServicios = esProp;
+        final showDiasMin = !esProp;
+
+        final req = {
+          ..._reqUniversales,
+          ...(_reqPorTipo[t] ?? const <String>[]),
+        }.toList();
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            _SectionCard(
+              title: 'Políticas y servicios',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _deposito,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _deposito,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: labelDeposito,
+                            prefixIcon: const Icon(Icons.savings_outlined),
+                          ),
+                        ),
                       ),
-                      decoration: const InputDecoration(
-                        labelText: 'Depósito (CLP)',
-                        prefixIcon: Icon(Icons.savings_outlined),
-                      ),
-                    ),
+                      const SizedBox(width: 12),
+                      if (showContratoMeses)
+                        Expanded(
+                          child: TextFormField(
+                            controller: _contratoMeses,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Contrato mínimo (meses)',
+                              prefixIcon: Icon(Icons.event_note_outlined),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _contratoMeses,
+                  if (showDiasMin) ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _diasMin,
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Contrato mínimo (meses)',
-                        prefixIcon: Icon(Icons.event_note_outlined),
+                        labelText: 'Días mínimos (opcional)',
+                        prefixIcon: Icon(Icons.calendar_today_outlined),
                       ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  if (esProp) ...[
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        _chipBool('Mascotas', _mascotas),
+                        _chipBool('Fumar', _fumar),
+                      ],
+                    ),
+                    if (showServicios) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          _chipBool('Agua', _incAgua),
+                          _chipBool('Luz', _incLuz),
+                          _chipBool('Gas', _incGas),
+                          _chipBool('Internet', _incInternet),
+                        ],
+                      ),
+                    ],
+                  ] else if (esHerr) ...[
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        _chipTextStatic('Incluye accesorios'),
+                        _chipTextStatic('Mantenimiento incluido'),
+                        _chipTextStatic('Entrega/Retiro coordinado'),
+                      ],
+                    ),
+                  ] else if (esVeh) ...[
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        _chipTextStatic('Combustible según entrega'),
+                        _chipTextStatic('Kilometraje según contrato'),
+                        _chipTextStatic('Multa por atraso'),
+                      ],
+                    ),
+                  ] else ...[
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        _chipTextStatic('Pago anticipado'),
+                        _chipTextStatic('Respeto a normas del recinto'),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _politicaCancel,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Política de cancelación (opcional)',
+                      prefixIcon: Icon(Icons.rule_folder_outlined),
+                      alignLabelWithHint: true,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: 'Requisitos',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  FilterChip(
-                    label: const Text('Mascotas'),
-                    selected: _mascotas.value,
-                    onSelected: (v) => setState(() => _mascotas.value = v),
+                  ValueListenableBuilder<Set<String>>(
+                    valueListenable: _reqSelected,
+                    builder: (_, sel, __) {
+                      return Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: req.map((r) {
+                          final picked = sel.contains(r);
+                          return FilterChip(
+                            label: Text(r),
+                            selected: picked,
+                            onSelected: (v) {
+                              final s = Set<String>.from(sel);
+                              v ? s.add(r) : s.remove(r);
+                              _reqSelected.value = s;
+                            },
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
-                  FilterChip(
-                    label: const Text('Fumar'),
-                    selected: _fumar.value,
-                    onSelected: (v) => setState(() => _fumar.value = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Agua'),
-                    selected: _incAgua.value,
-                    onSelected: (v) => setState(() => _incAgua.value = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Luz'),
-                    selected: _incLuz.value,
-                    onSelected: (v) => setState(() => _incLuz.value = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Gas'),
-                    selected: _incGas.value,
-                    onSelected: (v) => setState(() => _incGas.value = v),
-                  ),
-                  FilterChip(
-                    label: const Text('Internet'),
-                    selected: _incInternet.value,
-                    onSelected: (v) => setState(() => _incInternet.value = v),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _reqOtros,
+                    decoration: const InputDecoration(
+                      labelText: 'Otros requisitos (opcional)',
+                      prefixIcon: Icon(Icons.playlist_add_check_outlined),
+                    ),
                   ),
                 ],
               ),
-            ],
-          ),
-        ),
-      ],
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -1267,318 +1410,323 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
 
   // ---- Sub-secciones específicas ----
   List<Widget> _vehiculoFields() => [
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _vehMarca,
-            decoration: const InputDecoration(
-              labelText: 'Marca',
-              prefixIcon: Icon(Icons.directions_car_filled_outlined),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _vehMarca,
+                decoration: const InputDecoration(
+                  labelText: 'Marca',
+                  prefixIcon: Icon(Icons.directions_car_filled_outlined),
+                ),
+                validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
+              ),
             ),
-            validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextFormField(
-            controller: _vehModelo,
-            decoration: const InputDecoration(
-              labelText: 'Modelo',
-              prefixIcon: Icon(Icons.local_taxi_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _vehModelo,
+                decoration: const InputDecoration(
+                  labelText: 'Modelo',
+                  prefixIcon: Icon(Icons.local_taxi_outlined),
+                ),
+                validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
+              ),
             ),
-            validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
-          ),
+          ],
         ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _year,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Año',
-              prefixIcon: Icon(Icons.time_to_leave_outlined),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _year,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Año',
+                  prefixIcon: Icon(Icons.time_to_leave_outlined),
+                ),
+                validator: _reqIfVehiculo,
+              ),
             ),
-            validator: _reqIfVehiculo,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextFormField(
-            controller: _vehKm,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Kilometraje',
-              prefixIcon: Icon(Icons.speed_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _vehKm,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Kilometraje',
+                  prefixIcon: Icon(Icons.speed_outlined),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    Row(
-      children: [
-        Expanded(
-          child: _Select<String>(
-            label: 'Transmisión',
-            icon: Icons.settings_suggest_outlined,
-            valueListenable: _vehTransmision,
-            options: const ['Automática', 'Manual'],
-          ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _Select<String>(
+                label: 'Transmisión',
+                icon: Icons.settings_suggest_outlined,
+                valueListenable: _vehTransmision,
+                options: const ['Automática', 'Manual'],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Select<String>(
+                label: 'Combustible',
+                icon: Icons.local_gas_station_outlined,
+                valueListenable: _vehCombustible,
+                options: const ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _Select<String>(
-            label: 'Combustible',
-            icon: Icons.local_gas_station_outlined,
-            valueListenable: _vehCombustible,
-            options: const ['Gasolina', 'Diésel', 'Híbrido', 'Eléctrico'],
-          ),
-        ),
-      ],
-    ),
-  ];
+      ];
 
   List<Widget> _canchaFields() => [
-    Row(
-      children: [
-        Expanded(
-          child: _Select<String>(
-            label: 'Deporte',
-            icon: Icons.sports_soccer_outlined,
-            valueListenable: _canchaDeporte,
-            options: const [
-              'Fútbol 7',
-              'Fútbol 11',
-              'Pádel',
-              'Tenis',
-              'Básquetbol',
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _Select<String>(
-            label: 'Superficie',
-            icon: Icons.landscape_outlined,
-            valueListenable: _canchaSuperficie,
-            options: const ['Pasto sintético', 'Cemento', 'Tierra', 'Madera'],
-          ),
-        ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _canchaCapacidad,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Capacidad (personas)',
-              prefixIcon: Icon(Icons.groups_2_outlined),
+        Row(
+          children: [
+            Expanded(
+              child: _Select<String>(
+                label: 'Deporte',
+                icon: Icons.sports_soccer_outlined,
+                valueListenable: _canchaDeporte,
+                options: const [
+                  'Fútbol 7',
+                  'Fútbol 11',
+                  'Pádel',
+                  'Tenis',
+                  'Básquetbol',
+                ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextFormField(
-            controller: _canchaHorario,
-            decoration: const InputDecoration(
-              labelText: 'Horario (ej: 10:00-22:00)',
-              prefixIcon: Icon(Icons.schedule_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Select<String>(
+                label: 'Superficie',
+                icon: Icons.landscape_outlined,
+                valueListenable: _canchaSuperficie,
+                options: const [
+                  'Pasto sintético',
+                  'Cemento',
+                  'Tierra',
+                  'Madera'
+                ],
+              ),
             ),
-          ),
+          ],
         ),
-      ],
-    ),
-    const SizedBox(height: 6),
-    SwitchListTile(
-      value: _canchaTechada.value,
-      onChanged: (v) => setState(() => _canchaTechada.value = v),
-      title: const Text('Techada'),
-      contentPadding: EdgeInsets.zero,
-    ),
-    SwitchListTile(
-      value: _canchaIluminacion.value,
-      onChanged: (v) => setState(() => _canchaIluminacion.value = v),
-      title: const Text('Iluminación'),
-      contentPadding: EdgeInsets.zero,
-    ),
-  ];
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _canchaCapacidad,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Capacidad (personas)',
+                  prefixIcon: Icon(Icons.groups_2_outlined),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _canchaHorario,
+                decoration: const InputDecoration(
+                  labelText: 'Horario (ej: 10:00-22:00)',
+                  prefixIcon: Icon(Icons.schedule_outlined),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SwitchListTile(
+          value: _canchaTechada.value,
+          onChanged: (v) => setState(() => _canchaTechada.value = v),
+          title: const Text('Techada'),
+          contentPadding: EdgeInsets.zero,
+        ),
+        SwitchListTile(
+          value: _canchaIluminacion.value,
+          onChanged: (v) => setState(() => _canchaIluminacion.value = v),
+          title: const Text('Iluminación'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ];
 
   List<Widget> _piscinaFields() => [
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _piscinaLargo,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Largo (m)',
-              prefixIcon: Icon(Icons.straighten_outlined),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _piscinaLargo,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Largo (m)',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
+              ),
             ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _piscinaAncho,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Ancho (m)',
+                  prefixIcon: Icon(Icons.straighten_outlined),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _piscinaProfundidad,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Profundidad (m)',
+            prefixIcon: Icon(Icons.waves_outlined),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextFormField(
-            controller: _piscinaAncho,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Ancho (m)',
-              prefixIcon: Icon(Icons.straighten_outlined),
-            ),
-          ),
+        const SizedBox(height: 6),
+        SwitchListTile(
+          value: _piscinaClimatizada.value,
+          onChanged: (v) => setState(() => _piscinaClimatizada.value = v),
+          title: const Text('Climatizada'),
+          contentPadding: EdgeInsets.zero,
         ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    TextFormField(
-      controller: _piscinaProfundidad,
-      keyboardType: TextInputType.number,
-      decoration: const InputDecoration(
-        labelText: 'Profundidad (m)',
-        prefixIcon: Icon(Icons.waves_outlined),
-      ),
-    ),
-    const SizedBox(height: 6),
-    SwitchListTile(
-      value: _piscinaClimatizada.value,
-      onChanged: (v) => setState(() => _piscinaClimatizada.value = v),
-      title: const Text('Climatizada'),
-      contentPadding: EdgeInsets.zero,
-    ),
-    SwitchListTile(
-      value: _piscinaInterior.value,
-      onChanged: (v) => setState(() => _piscinaInterior.value = v),
-      title: const Text('Interior'),
-      contentPadding: EdgeInsets.zero,
-    ),
-  ];
+        SwitchListTile(
+          value: _piscinaInterior.value,
+          onChanged: (v) => setState(() => _piscinaInterior.value = v),
+          title: const Text('Interior'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ];
 
   List<Widget> _herramientaFields() => [
-    TextFormField(
-      controller: _herrNombre,
-      decoration: const InputDecoration(
-        labelText: 'Nombre / modelo',
-        prefixIcon: Icon(Icons.handyman_outlined),
-      ),
-      validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
-    ),
-    const SizedBox(height: 12),
-    Row(
-      children: [
-        Expanded(
-          child: _Select<String>(
-            label: 'Condición',
-            icon: Icons.check_circle_outline,
-            valueListenable: _herrCondicion,
-            options: const ['Nueva', 'Usada'],
+        TextFormField(
+          controller: _herrNombre,
+          decoration: const InputDecoration(
+            labelText: 'Nombre / modelo',
+            prefixIcon: Icon(Icons.handyman_outlined),
+          ),
+          validator: (v) => v == null || v.isEmpty ? 'Obligatorio' : null,
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _Select<String>(
+                label: 'Condición',
+                icon: Icons.check_circle_outline,
+                valueListenable: _herrCondicion,
+                options: const ['Nueva', 'Usada'],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _Select<String>(
+                label: 'Entrega',
+                icon: Icons.local_shipping_outlined,
+                valueListenable: _herrEntrega,
+                options: const ['Retiro en tienda', 'Despacho', 'A convenir'],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _herrGarantia,
+          decoration: const InputDecoration(
+            labelText: 'Garantía/Depósito (opcional)',
+            prefixIcon: Icon(Icons.safety_check_outlined),
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _Select<String>(
-            label: 'Entrega',
-            icon: Icons.local_shipping_outlined,
-            valueListenable: _herrEntrega,
-            options: const ['Retiro en tienda', 'Despacho', 'A convenir'],
-          ),
-        ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    TextFormField(
-      controller: _herrGarantia,
-      decoration: const InputDecoration(
-        labelText: 'Garantía/Depósito (opcional)',
-        prefixIcon: Icon(Icons.safety_check_outlined),
-      ),
-    ),
-  ];
+      ];
 
   List<Widget> _terrenoFields() => [
-    _Select<String>(
-      label: 'Uso/Zonificación',
-      icon: Icons.layers_outlined,
-      valueListenable: _terrUso,
-      options: const ['Residencial', 'Comercial', 'Industrial', 'Agrícola'],
-    ),
-    const SizedBox(height: 6),
-    SwitchListTile(
-      value: _terrAgua.value,
-      onChanged: (v) => setState(() => _terrAgua.value = v),
-      title: const Text('Agua disponible'),
-      contentPadding: EdgeInsets.zero,
-    ),
-    SwitchListTile(
-      value: _terrLuz.value,
-      onChanged: (v) => setState(() => _terrLuz.value = v),
-      title: const Text('Electricidad disponible'),
-      contentPadding: EdgeInsets.zero,
-    ),
-  ];
+        _Select<String>(
+          label: 'Uso/Zonificación',
+          icon: Icons.layers_outlined,
+          valueListenable: _terrUso,
+          options: const ['Residencial', 'Comercial', 'Industrial', 'Agrícola'],
+        ),
+        const SizedBox(height: 6),
+        SwitchListTile(
+          value: _terrAgua.value,
+          onChanged: (v) => setState(() => _terrAgua.value = v),
+          title: const Text('Agua disponible'),
+          contentPadding: EdgeInsets.zero,
+        ),
+        SwitchListTile(
+          value: _terrLuz.value,
+          onChanged: (v) => setState(() => _terrLuz.value = v),
+          title: const Text('Electricidad disponible'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ];
 
   List<Widget> _oficinaFields() => [
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _ofiM2,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'm² útiles',
-              prefixIcon: Icon(Icons.square_foot_outlined),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _ofiM2,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'm² útiles',
+                  prefixIcon: Icon(Icons.square_foot_outlined),
+                ),
+                validator: (v) =>
+                    _type.value == 'oficina' && (v == null || v.isEmpty)
+                        ? 'Obligatorio'
+                        : null,
+              ),
             ),
-            validator: (v) =>
-                _type.value == 'oficina' && (v == null || v.isEmpty)
-                ? 'Obligatorio'
-                : null,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: TextFormField(
-            controller: _ofiSalas,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Salas de reunión',
-              prefixIcon: Icon(Icons.meeting_room_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextFormField(
+                controller: _ofiSalas,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Salas de reunión',
+                  prefixIcon: Icon(Icons.meeting_room_outlined),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
-      ],
-    ),
-    const SizedBox(height: 12),
-    Row(
-      children: [
-        Expanded(
-          child: TextFormField(
-            controller: _ofiEstacionamientos,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(
-              labelText: 'Estacionamientos',
-              prefixIcon: Icon(Icons.local_parking_outlined),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _ofiEstacionamientos,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Estacionamientos',
+                  prefixIcon: Icon(Icons.local_parking_outlined),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SwitchListTile(
+                value: _ofiAmoblada.value,
+                onChanged: (v) => setState(() => _ofiAmoblada.value = v),
+                title: const Text('Amoblada'),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SwitchListTile(
-            value: _ofiAmoblada.value,
-            onChanged: (v) => setState(() => _ofiAmoblada.value = v),
-            title: const Text('Amoblada'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      ],
-    ),
-  ];
+      ];
 
   String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
@@ -1601,9 +1749,38 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     }
   }
 
-  // ====== HELPERS VIDEO & MAPA (MEJORADOS) ======
+  // ====== VIDEO: grabar / elegir / limpiar ======
+  Future<void> _recordVideo() async {
+    final picker = ImagePicker();
+    final XFile? x = await picker.pickVideo(
+      source: ImageSource.camera,
+      maxDuration: const Duration(minutes: 2),
+    );
+    if (x == null) return;
+    setState(() {
+      _localVideo = File(x.path);
+      _videoUrl.clear();
+    });
+  }
 
-  // ¿Es un enlace/ID de YouTube?
+  Future<void> _pickVideoFromGallery() async {
+    final picker = ImagePicker();
+    final XFile? x = await picker.pickVideo(source: ImageSource.gallery);
+    if (x == null) return;
+    setState(() {
+      _localVideo = File(x.path);
+      _videoUrl.clear();
+    });
+  }
+
+  void _clearVideo() {
+    setState(() {
+      _localVideo = null;
+      _videoUrl.clear();
+    });
+  }
+
+  // ====== VIDEO & MAPA ======
   bool _isYouTube(String u) {
     final lu = u.toLowerCase();
     return lu.contains('youtube.com') ||
@@ -1611,7 +1788,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
         lu.length == 11;
   }
 
-  // Extrae el ID de YouTube desde ID directo, watch, youtu.be, shorts, etc.
   String? _extractYouTubeId(String input) {
     final s = input.trim();
     final idOnly = RegExp(r'^[0-9A-Za-z_-]{11}$');
@@ -1623,11 +1799,9 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     } catch (_) {}
 
     if (uri != null && uri.host.isNotEmpty) {
-      // ?v=xxxx
       final v = uri.queryParameters['v'];
       if (v != null && idOnly.hasMatch(v)) return v;
 
-      // youtu.be/<id> o /shorts/<id> o /embed/<id>
       final segs = uri.pathSegments;
       if (uri.host.contains('youtu.be') && segs.isNotEmpty) {
         final cand = segs.last;
@@ -1663,13 +1837,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     );
   }
 
-  // Preview con prioridad al video local
   Widget _videoPreview(String? url) {
     if ((url == null || url.trim().isEmpty) && _localVideo == null) {
       return const SizedBox.shrink();
     }
-
-    // 1) Local
     if (_localVideo != null) {
       return FutureBuilder<Widget>(
         future: _mp4Player(_localVideo!.path),
@@ -1678,8 +1849,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
             : const SizedBox(height: 180),
       );
     }
-
-    // 2) YouTube
     final u = url!.trim();
     if (_isYouTube(u)) {
       final id = _extractYouTubeId(u);
@@ -1709,8 +1878,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
         ],
       );
     }
-
-    // 3) MP4 remoto
     if (_isMp4(u)) {
       return FutureBuilder<Widget>(
         future: _mp4Player(u),
@@ -1719,48 +1886,12 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
             : const SizedBox(height: 180),
       );
     }
-
-    // 4) Otro enlace: abrir afuera
     return TextButton.icon(
       onPressed: () =>
           launchUrl(Uri.parse(u), mode: LaunchMode.externalApplication),
       icon: const Icon(Icons.open_in_new),
       label: const Text('Abrir video'),
     );
-  }
-
-  // ====== Acciones de video ======
-  Future<void> _pickVideoFromGallery() async {
-    final picker = ImagePicker();
-    final x = await picker.pickVideo(
-      source: ImageSource.gallery,
-      maxDuration: const Duration(minutes: 5),
-    );
-    if (x == null) return;
-    setState(() {
-      _localVideo = File(x.path);
-      _videoUrl.text = x.path; // visible para el usuario
-    });
-  }
-
-  Future<void> _recordVideo() async {
-    final picker = ImagePicker();
-    final x = await picker.pickVideo(
-      source: ImageSource.camera,
-      maxDuration: const Duration(minutes: 5),
-    );
-    if (x == null) return;
-    setState(() {
-      _localVideo = File(x.path);
-      _videoUrl.text = x.path;
-    });
-  }
-
-  void _clearVideo() {
-    setState(() {
-      _localVideo = null;
-      _videoUrl.clear();
-    });
   }
 
   // ====== MAPA ======
@@ -1771,16 +1902,20 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
   }
 
   Future<void> _geocodeAddress() async {
-    final parts = [
+    // FIX: compone correctamente la query y valida vacío
+    final parts = <String>[
       _street.text.trim(),
       _location.text.trim(),
       _comunaCtrl.text.trim(),
       'Chile',
-    ].where((e) => e.isNotEmpty).join(', ');
+    ]..removeWhere((e) => e.isEmpty);
 
-    if (parts.length < 5) return;
+    final query = parts.join(', ');
+    if (query.isEmpty) return;
+
     try {
-      final list = await locationFromAddress(parts, localeIdentifier: 'es_CL');
+      // 🔧 Se elimina localeIdentifier para evitar undefined_named_parameter
+      final list = await locationFromAddress(query);
       if (list.isNotEmpty) {
         final la = list.first.latitude;
         final lo = list.first.longitude;
@@ -1811,7 +1946,6 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
           TileLayer(
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           ),
-
           MarkerLayer(
             markers: [
               Marker(
@@ -1829,6 +1963,22 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
         ],
       ),
     );
+  }
+
+  // ====== Chips helpers ======
+  Widget _chipBool(String label, ValueNotifier<bool> notifier) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: notifier,
+      builder: (_, v, __) => FilterChip(
+        label: Text(label),
+        selected: v,
+        onSelected: (nv) => setState(() => notifier.value = nv),
+      ),
+    );
+  }
+
+  Widget _chipTextStatic(String label) {
+    return FilterChip(label: Text(label), selected: true, onSelected: null);
   }
 
   @override
@@ -1884,6 +2034,10 @@ class _CrearArriendoPageState extends State<CrearArriendoPage>
     _deposito.dispose();
     _contratoMeses.dispose();
     _destacado.dispose();
+    _reqOtros.dispose();
+    _diasMin.dispose();
+    _politicaCancel.dispose();
+    _reqSelected.dispose();
     _stepperCtrl.dispose();
     super.dispose();
   }

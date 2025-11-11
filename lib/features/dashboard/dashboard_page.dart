@@ -22,8 +22,7 @@ class DashboardPage extends StatelessWidget {
 
           final nombre = ctrl.usuarioActual?['nombre'] ?? 'Usuario';
           final rol = ctrl.isCompany ? 'Empresa' : 'Usuario';
-          final avatarUrl =
-              ctrl.usuarioActual?['imagen'] ??
+          final avatarUrl = ctrl.usuarioActual?['imagen'] ??
               'https://i.pravatar.cc/150?img=8';
 
           return Scaffold(
@@ -80,7 +79,6 @@ class DashboardPage extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 10),
-
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -124,7 +122,6 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 30),
                       _sectionTitle('🏠 Propiedades destacadas'),
                       PropertyCarousel(listado: ctrl.propiedades),
@@ -144,16 +141,16 @@ class DashboardPage extends StatelessWidget {
   }
 
   Widget _sectionTitle(String title) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 6),
-    child: Text(
-      title,
-      style: const TextStyle(
-        fontSize: 18,
-        fontWeight: FontWeight.w600,
-        color: Colors.black87,
-      ),
-    ),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+      );
 }
 
 class _StatButton extends StatelessWidget {

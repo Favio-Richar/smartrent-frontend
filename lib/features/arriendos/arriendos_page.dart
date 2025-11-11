@@ -1,4 +1,8 @@
-// lib/features/arriendos/arriendos_page.dart
+// lib/features/arriendos/arriendos_page.dart  (ACTUALIZADO)
+// - No rompe rutas ni lógica.
+// - Asegura que cada item tenga image_url/imageUrl con la miniatura normalizada.
+// - Resto de flujo intacto.
+
 import 'package:flutter/material.dart';
 import 'package:smartrent_plus/data/services/property_service.dart';
 import 'package:smartrent_plus/features/arriendos/widgets/card_propiedad.dart';
@@ -29,7 +33,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
   String _sort = 'Recientes'; // Recientes | Precio ↑ | Precio ↓
   bool _grid = true; // true = Grid, false = Lista
 
-  // Categorías rápidas (ampliadas)
   final List<_QuickCat> _quickCats = const [
     _QuickCat('propiedad', Icons.home_work_outlined),
     _QuickCat('vehiculo', Icons.directions_car),
@@ -41,10 +44,9 @@ class _ArriendosPageState extends State<ArriendosPage> {
     _QuickCat('maquinaria', Icons.agriculture),
     _QuickCat('evento', Icons.event_seat),
   ];
-  String? _selectedQuick; // categoría rápida activa
+  String? _selectedQuick;
 
   // --- Comunas (selector) ---
-  // --TODO:reemplazar por lista desde backend si la tienes disponible.//
   final List<String> _comunas = const [
     'Santiago',
     'Las Condes',
@@ -77,7 +79,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
     super.dispose();
   }
 
-  // --- Scroll infinito ---
   void _onScroll() {
     if (_loadingMore || !_hasMore) return;
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
@@ -85,7 +86,23 @@ class _ArriendosPageState extends State<ArriendosPage> {
     }
   }
 
-  // --- Carga (API) ---
+  // 👇 Inyecta compatibilidad de imagen para CardPropiedadMap
+  List<Map<String, dynamic>> _withThumbCompat(List<Map<String, dynamic>> list) {
+    return list.map((e) {
+      final m = Map<String, dynamic>.from(e);
+      final thumb = (m['_thumb'] ?? '').toString();
+      if ((m['image_url'] == null || '${m['image_url']}'.isEmpty) &&
+          thumb.isNotEmpty) {
+        m['image_url'] = thumb;
+      }
+      if ((m['imageUrl'] == null || '${m['imageUrl']}'.isEmpty) &&
+          thumb.isNotEmpty) {
+        m['imageUrl'] = thumb;
+      }
+      return m;
+    }).toList();
+  }
+
   Future<void> _load({bool reset = false}) async {
     try {
       if (reset) {
@@ -97,15 +114,13 @@ class _ArriendosPageState extends State<ArriendosPage> {
         });
       }
 
-      // Construir query combinando filtros + sort + categoría rápida + comuna
       final q = Map<String, dynamic>.from(_filters);
       if (_selectedQuick != null && _selectedQuick!.isNotEmpty) {
-        q['tipo'] = _selectedQuick; // integra chips con tu filtro
+        q['tipo'] = _selectedQuick;
       }
       if (_selectedComuna != null && _selectedComuna!.isNotEmpty) {
-        q['comuna'] = _selectedComuna; // clave de backend para comuna
+        q['comuna'] = _selectedComuna;
       }
-      // Ordenamiento (si el backend lo soporta)
       if (_sort == 'Precio ↑') q['sort'] = 'price_asc';
       if (_sort == 'Precio ↓') q['sort'] = 'price_desc';
 
@@ -120,7 +135,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
           .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      // Fallback de orden local si el backend aún no ordena
       if (_sort == 'Precio ↑') {
         list.sort(
           (a, b) => ((a['price'] ?? a['precio'] ?? 0) as num).compareTo(
@@ -136,7 +150,8 @@ class _ArriendosPageState extends State<ArriendosPage> {
       }
 
       setState(() {
-        _items = reset ? list : [..._items, ...list];
+        final normalized = _withThumbCompat(list);
+        _items = reset ? normalized : [..._items, ...normalized];
         _hasMore = list.length == _limit;
         _loading = false;
       });
@@ -161,7 +176,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
     _page += 1;
     try {
       final q = Map<String, dynamic>.from(_filters);
-      // ✅ Envolver en bloques para evitar la alerta (sin cambiar lógica)
       if (_selectedQuick != null && _selectedQuick!.isNotEmpty) {
         q['tipo'] = _selectedQuick;
       }
@@ -181,7 +195,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
           .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
           .toList();
 
-      // Fallback de orden local
       if (_sort == 'Precio ↑') {
         list.sort(
           (a, b) => ((a['price'] ?? a['precio'] ?? 0) as num).compareTo(
@@ -197,7 +210,7 @@ class _ArriendosPageState extends State<ArriendosPage> {
       }
 
       setState(() {
-        _items.addAll(list);
+        _items.addAll(_withThumbCompat(list));
         _hasMore = list.length == _limit;
       });
     } finally {
@@ -205,7 +218,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
     }
   }
 
-  // --- UI handlers ---
   void _applyFilters(Map<String, dynamic> f) {
     _filters = f;
     _load(reset: true);
@@ -293,7 +305,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
       appBar: AppBar(
         title: const Text('Catálogo'),
         actions: [
-          // Orden
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: DropdownButtonHideUnderline(
@@ -313,7 +324,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
               ),
             ),
           ),
-          // Toggle Grid/List
           IconButton(
             tooltip: _grid ? 'Ver en lista' : 'Ver en grilla',
             onPressed: _toggleView,
@@ -323,13 +333,9 @@ class _ArriendosPageState extends State<ArriendosPage> {
           ),
         ],
       ),
-
       body: Column(
         children: [
-          // Filtros avanzados (tu widget)
           FiltroArriendosWidget(onApply: _applyFilters),
-
-          // Categorías rápidas
           SizedBox(
             height: 44,
             child: ListView.separated(
@@ -349,15 +355,12 @@ class _ArriendosPageState extends State<ArriendosPage> {
               },
             ),
           ),
-
-          // Barra comuna + resumen + chips activos
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
             child: Column(
               children: [
                 Row(
                   children: [
-                    // Botón comuna
                     OutlinedButton.icon(
                       onPressed: _openComunasPicker,
                       icon: const Icon(Icons.location_on_outlined),
@@ -377,7 +380,6 @@ class _ArriendosPageState extends State<ArriendosPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                // Chips activos (categoría rápida + comuna)
                 Wrap(
                   spacing: 8,
                   runSpacing: -8,
@@ -397,27 +399,25 @@ class _ArriendosPageState extends State<ArriendosPage> {
               ],
             ),
           ),
-
-          // Contenido principal
           Expanded(
             child: _loading
                 ? const _SkeletonList(grid: true)
                 : (_items.isEmpty
-                      ? _EmptyState(onRetry: () => _load(reset: true))
-                      : RefreshIndicator(
-                          onRefresh: () => _load(reset: true),
-                          child: _grid
-                              ? _GridCatalog(
-                                  items: _items,
-                                  controller: _scroll,
-                                  loadingMore: _loadingMore,
-                                )
-                              : _ListCatalog(
-                                  items: _items,
-                                  controller: _scroll,
-                                  loadingMore: _loadingMore,
-                                ),
-                        )),
+                    ? _EmptyState(onRetry: () => _load(reset: true))
+                    : RefreshIndicator(
+                        onRefresh: () => _load(reset: true),
+                        child: _grid
+                            ? _GridCatalog(
+                                items: _items,
+                                controller: _scroll,
+                                loadingMore: _loadingMore,
+                              )
+                            : _ListCatalog(
+                                items: _items,
+                                controller: _scroll,
+                                loadingMore: _loadingMore,
+                              ),
+                      )),
           ),
         ],
       ),
@@ -444,7 +444,6 @@ class _ActiveChip extends StatelessWidget {
   }
 }
 
-// Grid con tus cards
 class _GridCatalog extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final ScrollController controller;
@@ -475,7 +474,6 @@ class _GridCatalog extends StatelessWidget {
   }
 }
 
-// Lista vertical (misma card pero a ancho completo)
 class _ListCatalog extends StatelessWidget {
   final List<Map<String, dynamic>> items;
   final ScrollController controller;
@@ -504,7 +502,6 @@ class _ListCatalog extends StatelessWidget {
   }
 }
 
-// Empty state con CTA
 class _EmptyState extends StatelessWidget {
   final VoidCallback onRetry;
   const _EmptyState({required this.onRetry});
@@ -542,7 +539,6 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-// Skeletons/Placeholders
 class _SkeletonList extends StatelessWidget {
   final bool grid;
   const _SkeletonList({required this.grid});

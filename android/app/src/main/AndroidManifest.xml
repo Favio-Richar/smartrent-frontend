@@ -1,30 +1,38 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.smartrent_plus">
 
-    <!-- Permisos básicos -->
+    <!-- 🌐 Permisos generales -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.CAMERA" />
-    <!-- Si NO guardas en almacenamiento externo, NO uses estos permisos:
+
+    <!-- 📂 Permisos para exportar, leer o abrir PDF / Excel / imágenes -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
-    -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+    <!-- 🔔 Requerido desde Android 13+ si planeas usar notificaciones (SnackBars no necesitan permiso) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- 📍 Permisos opcionales (para ubicación en segundo plano, si usas mapas o tracking en el futuro) -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application
         android:name="${applicationName}"
         android:label="SmartRent+"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true"
+        android:requestLegacyExternalStorage="true"
+        android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- (Opcional) Solo si usas SDK de Google Maps nativo
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="TU_API_KEY_AQUI" />
-        -->
-
+        <!-- 🧭 Actividad principal -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -45,11 +53,7 @@
             </intent-filter>
         </activity>
 
-        <meta-data
-            android:name="flutterEmbedding"
-            android:value="2" />
-
-        <!-- FileProvider para share_plus -->
+        <!-- 🧩 FileProvider (requerido para abrir PDF, Excel e imágenes compartidas) -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -59,9 +63,14 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- 🧩 Configuración Flutter -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
     </application>
 
-    <!-- Consultas (abrir hojas de compartir / mapas, etc.) -->
+    <!-- 🔍 Permite que otras apps (como visor de PDF o Excel) se abran -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
@@ -71,6 +80,13 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/pdf" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        </intent>
     </queries>
-
 </manifest>
