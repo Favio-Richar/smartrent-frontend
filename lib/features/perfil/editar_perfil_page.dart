@@ -136,10 +136,9 @@ class _EditarPerfilPageState extends State<EditarPerfilPage> {
                     backgroundImage: _imageFile != null
                         ? FileImage(_imageFile!)
                         : NetworkImage(
-                                widget.user['imagen'] ??
-                                    'https://i.pravatar.cc/150?img=12',
-                              )
-                              as ImageProvider,
+                            widget.user['imagen'] ??
+                                'https://i.pravatar.cc/150?img=12',
+                          ) as ImageProvider,
                   ),
                   Positioned(
                     bottom: 0,

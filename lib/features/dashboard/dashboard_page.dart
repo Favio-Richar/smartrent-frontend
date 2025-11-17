@@ -1,17 +1,83 @@
-// lib/features/dashboard/dashboard_page.dart
+// ===============================================================
+// 🔹 DASHBOARD PAGE - SmartRent+ (Corregido y mejorado FINAL)
+// ===============================================================
+
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dashboard_controller.dart';
 import 'dashboard_widgets.dart';
 import 'package:smartrent_plus/routes/app_routes.dart';
 
-class DashboardPage extends StatelessWidget {
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  String? profileImagePath; // Puede ser archivo o URL
+  String nombreLocal = "Usuario";
+  String descripcionLocal = "";
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocalData();
+  }
+
+  // ============================================================
+  // 🔹 Cargar datos guardados localmente (nombre, foto, desc)
+  // ============================================================
+  Future<void> _loadLocalData() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    setState(() {
+      profileImagePath = prefs.getString("profileImage");
+      nombreLocal = prefs.getString("nombreUsuario") ?? "Usuario";
+      descripcionLocal = prefs.getString("descripcion") ?? "";
+    });
+  }
+
+  // ============================================================
+  // 🔹 Detectar si la imagen es URL o archivo local
+  // ============================================================
+  ImageProvider _getProfileImage() {
+    if (profileImagePath == null) {
+      return const AssetImage("assets/images/profile_placeholder.png");
+    }
+
+    // Caso 1: URL
+    if (profileImagePath!.startsWith("http")) {
+      return NetworkImage(profileImagePath!);
+    }
+
+    // Caso 2: archivo interno
+    if (File(profileImagePath!).existsSync()) {
+      return FileImage(File(profileImagePath!));
+    }
+
+    // Fallback
+    return const AssetImage("assets/images/profile_placeholder.png");
+  }
+
+  // ============================================================
+  // 🔵 NAVEGAR A PERFIL Y VOLVER ACTUALIZADO
+  // ============================================================
+  Future<void> _goToPerfil() async {
+    await Navigator.pushNamed(context, AppRoutes.perfil);
+
+    await _loadLocalData(); // 🔥 Recarga nombre + foto al volver
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => DashboardController(),
+      create: (_) => DashboardController()..initDashboard(),
       child: Consumer<DashboardController>(
         builder: (context, ctrl, _) {
           if (ctrl.isLoading) {
@@ -20,15 +86,25 @@ class DashboardPage extends StatelessWidget {
             );
           }
 
-          final nombre = ctrl.usuarioActual?['nombre'] ?? 'Usuario';
-          final rol = ctrl.isCompany ? 'Empresa' : 'Usuario';
-          final avatarUrl = ctrl.usuarioActual?['imagen'] ??
-              'https://i.pravatar.cc/150?img=8';
+          // Nombre del backend (si existe)
+          final nombreBackend = ctrl.usuarioActual?['nombre'];
+
+          // PRIORIDAD:
+          // 1) nombreLocal guardado
+          // 2) backend
+          // 3) "Usuario"
+          final nombreFinal =
+              (nombreLocal != "Usuario" && nombreLocal.isNotEmpty)
+                  ? nombreLocal
+                  : (nombreBackend ?? "Usuario");
 
           return Scaffold(
             backgroundColor: const Color(0xFFF4F6FA),
             body: RefreshIndicator(
-              onRefresh: ctrl.initDashboard,
+              onRefresh: () async {
+                await ctrl.initDashboard();
+                await _loadLocalData();
+              },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 child: Padding(
@@ -37,28 +113,34 @@ class DashboardPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: 10),
+
+                      // ============================================================
+                      // 🔵 CABECERA DEL DASHBOARD (con botón en foto)
+                      // ============================================================
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 30,
-                            backgroundImage: NetworkImage(avatarUrl),
+                          GestureDetector(
+                            onTap: _goToPerfil,
+                            child: CircleAvatar(
+                              radius: 30,
+                              backgroundImage: _getProfileImage(),
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Hola, $nombre 👋',
+                                'Hola, $nombreFinal 👋',
                                 style: const TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
                                 ),
                               ),
                               Text(
-                                rol == 'Empresa'
-                                    ? 'Administra tus anuncios y métricas'
-                                    : 'Explora arriendos, ventas y empleos',
+                                descripcionLocal.isNotEmpty
+                                    ? descripcionLocal
+                                    : "Explora arriendos, ventas y empleos",
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: Colors.black54,
@@ -68,8 +150,11 @@ class DashboardPage extends StatelessWidget {
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 25),
+
                       SearchBarWidget(onSearch: (v) {}),
+
                       const SizedBox(height: 25),
                       const Text(
                         "Tu resumen general",
@@ -78,7 +163,9 @@ class DashboardPage extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+
                       const SizedBox(height: 10),
+
                       Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -90,9 +177,7 @@ class DashboardPage extends StatelessWidget {
                             label: "Arriendos",
                             value: "12",
                             onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.arriendos,
-                            ),
+                                context, AppRoutes.arriendos),
                           ),
                           _StatButton(
                             icon: Icons.sell_rounded,
@@ -116,18 +201,21 @@ class DashboardPage extends StatelessWidget {
                             label: "Favoritos",
                             value: "7",
                             onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.empleosFavoritos,
-                            ),
+                                context, AppRoutes.empleosFavoritos),
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 30),
+
                       _sectionTitle('🏠 Propiedades destacadas'),
                       PropertyCarousel(listado: ctrl.propiedades),
+
                       const SizedBox(height: 25),
+
                       _sectionTitle('💼 Ofertas laborales'),
                       JobsCarousel(listado: ctrl.empleos),
+
                       const SizedBox(height: 50),
                     ],
                   ),
@@ -171,16 +259,14 @@ class _StatButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
       onTap: onTap,
-      // 🔧 Reemplazo sin deprecations:
-      splashColor: color.withValues(alpha: 0.2),
+      borderRadius: BorderRadius.circular(16),
+      splashColor: color.withOpacity(0.2),
       child: Container(
         width: 85,
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          // 🔧 Reemplazo sin deprecations:
-          color: color.withValues(alpha: 0.10),
+          color: color.withOpacity(0.10),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -198,7 +284,6 @@ class _StatButton extends StatelessWidget {
             ),
             Text(
               label,
-              textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 12, color: Colors.black87),
             ),
           ],

@@ -1,12 +1,10 @@
 // ===============================================================
-// 🧭 RUTAS PRINCIPALES - SmartRent+ (versión final funcional)
-// ---------------------------------------------------------------
-// - Incluye todas las rutas principales y el Panel Administrativo
+// 🧭 RUTAS PRINCIPALES - SmartRent+ (versión FINAL SIN ERRORES)
 // ===============================================================
 
 import 'package:flutter/material.dart';
 
-// ---------- Splash / Auth ----------
+// Splash / Auth
 import 'package:smartrent_plus/features/splash/splash_page.dart';
 import 'package:smartrent_plus/features/auth/login_page.dart' as auth_login;
 import 'package:smartrent_plus/features/auth/register_page.dart'
@@ -14,54 +12,79 @@ import 'package:smartrent_plus/features/auth/register_page.dart'
 import 'package:smartrent_plus/features/auth/forgot_password.dart'
     as auth_forgot;
 
-// ---------- Menú / Dashboard ----------
+// Menú / Dashboard
 import 'package:smartrent_plus/features/menu/main_menu_page.dart';
 import 'package:smartrent_plus/features/dashboard/dashboard_page.dart';
 
-// ---------- Arriendos ----------
+// Arriendos
 import 'package:smartrent_plus/features/arriendos/arriendos_page.dart';
 import 'package:smartrent_plus/features/arriendos/mis_arriendos_page.dart';
 import 'package:smartrent_plus/features/arriendos/crear_arriendo_page.dart';
 import 'package:smartrent_plus/features/arriendos/reservas_page.dart';
 import 'package:smartrent_plus/features/arriendos/estadisticas_arriendo_page.dart';
 
-// ---------- Ventas ----------
+// Ventas
 import 'package:smartrent_plus/features/ventas/ventas_page.dart';
 import 'package:smartrent_plus/features/ventas/crear_venta_page.dart';
 import 'package:smartrent_plus/features/ventas/mis_ventas_page.dart';
 
-// ---------- Empresas ----------
+// Empresas
 import 'package:smartrent_plus/features/empresas/empresas_page.dart';
 import 'package:smartrent_plus/features/empresas/registro_empresa_page.dart';
 
-// ---------- Empleos ----------
+// ⭐ AGREGADO (IMPORTANTE)
+import 'package:smartrent_plus/features/empresas/perfil_empresa_page.dart';
+
+// Empleos
 import 'package:smartrent_plus/features/empleos/usuario_empleos_page.dart';
 import 'package:smartrent_plus/features/empleos/crear_empleo_page.dart';
 import 'package:smartrent_plus/features/empleos/favoritos_page.dart';
 import 'package:smartrent_plus/features/empleos/mis_postulaciones_page.dart';
 import 'package:smartrent_plus/features/empleos/empresa_panel_page.dart';
 
-// ---------- Soporte ----------
+// Soporte
 import 'package:smartrent_plus/features/soporte/soporte_page.dart';
 import 'package:smartrent_plus/features/soporte/faq_page.dart';
 import 'package:smartrent_plus/features/soporte/reporte_problema_page.dart';
 import 'package:smartrent_plus/features/soporte/contacto_page.dart';
 import 'package:smartrent_plus/features/soporte/comunidad_page.dart';
 
-// ---------- Admin Panel ----------
+// Admin
 import 'package:smartrent_plus/features/admin/admin_panel_page.dart';
 
-// ---------- Suscripciones ----------
+// Suscripciones
 import 'package:smartrent_plus/features/suscripciones/suscripciones_page.dart';
-import 'package:smartrent_plus/features/suscripciones/pago_sistema_page.dart';
 import 'package:smartrent_plus/features/suscripciones/pago_suscripcion_page.dart';
-import 'package:smartrent_plus/features/suscripciones/pago_transbank_page.dart';
+import 'package:smartrent_plus/features/suscripciones/pago_exitoso_page.dart';
+import 'package:smartrent_plus/features/suscripciones/pago_fallido_page.dart';
 
-// ---------- Perfil ----------
+import 'package:smartrent_plus/features/suscripciones/pago_webpay_page.dart';
+
+// Perfil
 import 'package:smartrent_plus/features/perfil/perfil_page.dart';
 
+// ⭐ Import correcto (ARREGLADO)
+import 'package:smartrent_plus/features/comentarios/comentario_page.dart';
+
+// ⭐ Placeholder de detalle (CREADO para evitar error)
+class DetalleComentarioPage extends StatelessWidget {
+  const DetalleComentarioPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Detalle Comentario")),
+      body: const Center(
+        child: Text(
+          "Pantalla DetalleComentarioPage (placeholder temporal)",
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
 class AppRoutes {
-  // ---------- AUTH / CORE ----------
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
@@ -69,7 +92,7 @@ class AppRoutes {
   static const String mainMenu = '/main-menu';
   static const String dashboard = '/dashboard';
 
-  // ---------- ARRIENDOS ----------
+  // Arriendos
   static const String arriendos = '/arriendos';
   static const String arriendosCrear = '/arriendos/crear';
   static const String arriendosMis = '/arriendos/mis';
@@ -77,46 +100,54 @@ class AppRoutes {
   static const String arriendosReservasUsuario = '/arriendos/mis-reservas';
   static const String arriendosEstadisticas = '/arriendos/estadisticas';
 
-  // ---------- VENTAS ----------
+  // Ventas
   static const String ventas = '/ventas';
   static const String ventasCrear = '/ventas/crear';
   static const String ventasMis = '/ventas/mis';
 
-  // ---------- EMPRESAS ----------
+  // Empresas
   static const String empresas = '/empresas';
   static const String empresasRegistro = '/empresas/registro';
 
-  // ---------- EMPLEOS ----------
+  // Agregado
+  static const String perfilEmpresa = '/empresa/perfil';
+
+  // Empleos
   static const String empleos = '/empleos';
   static const String empleosCrear = '/empleos/crear';
   static const String empleosFavoritos = '/empleos/favoritos';
   static const String empleosMisPostulaciones = '/empleos/mis-postulaciones';
   static const String empleosEmpresaPanel = '/empleos/empresa/panel';
 
-  // ---------- SOPORTE ----------
+  // Soporte
   static const String soporte = '/soporte';
   static const String soporteFaq = '/soporte/faq';
   static const String soporteReporte = '/soporte/reporte';
   static const String soporteContacto = '/soporte/contacto';
   static const String soporteComunidad = '/soporte/comunidad';
 
-  // ---------- ADMIN ----------
+  // Admin
   static const String adminPanel = '/admin/panel';
 
-  // ---------- SUSCRIPCIONES ----------
+  // Suscripciones
   static const String suscripciones = '/suscripciones';
-  static const String pagoSistema = '/suscripciones/pago-sistema';
   static const String pagoSuscripcion = '/suscripciones/pago-suscripcion';
-  static const String pagoTransbank = '/suscripciones/pago-transbank';
 
-  // ---------- PERFIL ----------
+  static const String pagoWebPay = '/suscripciones/pago-webpay';
+  static const String pagoExitoso = '/suscripciones/pago-exitoso';
+  static const String pagoFallido = '/suscripciones/pago-fallido';
+
+  // Perfil
   static const String perfil = '/perfil';
 
+  // Comentarios
+  static const String comentar = '/comentar';
+  static const String comentarioDetalle = '/comentarios/detalle';
+
   // ============================================================
-  // 🔹 MAPA COMPLETO DE RUTAS
+  // MAPA DE RUTAS
   // ============================================================
   static final Map<String, WidgetBuilder> routes = {
-    // Core
     splash: (_) => const SplashPage(),
     login: (_) => const auth_login.LoginPage(),
     register: (_) => const auth_register.UserRegisterPage(),
@@ -141,6 +172,11 @@ class AppRoutes {
     empresas: (_) => const EmpresasPage(),
     empresasRegistro: (_) => const RegistroEmpresaPage(),
 
+    perfilEmpresa: (context) {
+      final id = ModalRoute.of(context)!.settings.arguments as int;
+      return PerfilEmpresaPage(companyId: id);
+    },
+
     // Empleos
     empleos: (_) => const UsuarioEmpleosPage(),
     empleosCrear: (_) => const CrearEmpleoPage(),
@@ -160,18 +196,29 @@ class AppRoutes {
 
     // Suscripciones
     suscripciones: (_) => const SuscripcionesPage(),
-    pagoSistema: (_) => const PagoSistemaPage(
-        plan: 'BÁSICO', precio: '\$0', color: Colors.indigo),
     pagoSuscripcion: (_) => const PagoSuscripcionPage(
-        plan: 'PRO', precio: '\$4990', color: Colors.green),
-    pagoTransbank: (_) => const PagoTransbankPage(
-        url:
-            'https://webpay3gint.transbank.cl/webpayserver/initTransaction', // 🟢 URL simulada
-        plan: 'PREMIUM',
-        precio: '\$9990',
-        color: Colors.orange),
+          plan: "PREMIUM",
+          precio: "\$9.990",
+          color: Colors.indigo,
+        ),
+
+    pagoWebPay: (context) {
+      final args =
+          ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+      return PagoWebPayPage(
+        url: args["url"],
+        token: args["token"],
+      );
+    },
+
+    pagoExitoso: (_) => const PagoExitosoPage(),
+    pagoFallido: (_) => const PagoFallidoPage(),
 
     // Perfil
     perfil: (_) => const PerfilPage(),
+
+    // Comentarios
+    comentar: (_) => const DetalleComentarioPage(),
+    comentarioDetalle: (_) => const DetalleComentarioPage(),
   };
 }

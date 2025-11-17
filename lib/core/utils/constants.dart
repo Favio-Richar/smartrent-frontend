@@ -1,44 +1,46 @@
 // ===============================================================
-// 🔹 API CONSTANTS - SmartRent+ (versión PRO con ambientes múltiples)
+// 🔹 API CONSTANTS - SmartRent+ (versión FINAL con getToken)
 // ===============================================================
 
-class ApiConstants {
-  /// 🌐 Cambia este valor según tu entorno actual:
-  static const bool isEmulator = true; // ✅ true → 10.0.2.2 / false → LAN / prod
+import 'package:shared_preferences/shared_preferences.dart';
 
-  // 🔹 Base URLs automáticas
+class ApiConstants {
+  /// 🌐 Cambia según entorno:
+  static const bool isEmulator = true;
+
+  // 🔹 URL Base automática
   static String get baseUrl {
-    if (isEmulator) return 'http://10.0.2.2:3000'; // Android emulator
-    return 'http://192.168.0.10:3000'; // ⚙️ IP local (ajusta a la tuya)
-    // return 'https://api.smartrentplus.cl'; // 🌍 Producción
+    if (isEmulator) return 'http://10.0.2.2:3000';
+    return 'http://192.168.0.10:3000';
+    // return 'https://api.smartrentplus.cl'; // producción
   }
 
   static const String apiPrefix = '/api';
 
-  /// 🔗 Construye URLs limpias para peticiones (ej: /uploads/image)
+  /// 🔗 URL limpia
   static String url(String path) {
     String clean = path.trim();
     if (clean.startsWith('/')) clean = clean.substring(1);
-    final uri = Uri.parse('$baseUrl$apiPrefix/$clean');
-    return uri.toString();
+    return '$baseUrl$apiPrefix/$clean';
   }
 
-  /// 🖼️ Devuelve URL absoluta de imágenes/videos
+  /// 🖼️ URL media
   static String media(String raw) {
     if (raw.isEmpty) return raw;
-    if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+    if (raw.startsWith('http')) return raw;
 
     var s = raw.replaceAll('\\', '/');
     if (s.startsWith('./')) s = s.substring(2);
-    if (s.startsWith('/./')) s = s.substring(3);
-    if (s.startsWith('public/')) s = s.substring(7);
-    if (s.startsWith('/public/')) s = s.substring(8);
-    if (s.startsWith('/api/')) s = s.substring(4);
     if (!s.startsWith('/')) s = '/$s';
 
-    final fixed = '$baseUrl$s'
-        .replaceAll(RegExp(r'(?<!:)//'), '/')
-        .replaceFirst('http:/', 'http://');
-    return fixed;
+    return '$baseUrl$s';
+  }
+
+  // ===============================================================
+  // 🔥 MÉTODO OBLIGATORIO QUE FALTABA
+  // ===============================================================
+  static Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString("token");
   }
 }

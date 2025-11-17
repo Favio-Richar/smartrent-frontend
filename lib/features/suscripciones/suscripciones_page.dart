@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:smartrent_plus/features/suscripciones/pago_suscripcion_page.dart';
+import 'package:smartrent_plus/features/suscripciones/pago_exitoso_page.dart';
+import 'package:smartrent_plus/features/suscripciones/pago_fallido_page.dart';
 
 class SuscripcionesPage extends StatefulWidget {
   const SuscripcionesPage({super.key});
@@ -10,7 +12,6 @@ class SuscripcionesPage extends StatefulWidget {
 }
 
 class _SuscripcionesPageState extends State<SuscripcionesPage> {
-  // Simulación del plan actual del usuario (por ahora está en "BÁSICO")
   final String _planActual = 'BÁSICO';
 
   @override
@@ -40,7 +41,7 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
             ),
             const SizedBox(height: 25),
 
-            // 🟩 Básico
+            // ------------------ BÁSICO ------------------
             PlanCard(
               title: 'BÁSICO',
               price: 'Gratis',
@@ -57,9 +58,9 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
               ],
               buttonText: 'Usar Gratis',
               isCurrentPlan: _planActual == 'BÁSICO',
-              onPressed: () {
+              onPressed: () async {
                 if (_planActual != 'BÁSICO') {
-                  Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => PagoSuscripcionPage(
@@ -69,13 +70,24 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
                       ),
                     ),
                   );
+
+                  if (!mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => result == null
+                          ? const PagoFallidoPage()
+                          : const PagoExitosoPage(),
+                    ),
+                  );
                 }
               },
             ),
 
             const SizedBox(height: 16),
 
-            // 🟦 Premium
+            // ------------------ PREMIUM ------------------
             PlanCard(
               title: 'PREMIUM',
               price: '\$9.990 / mes',
@@ -92,9 +104,9 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
               ],
               buttonText: 'Mejorar a Premium',
               isCurrentPlan: _planActual == 'PREMIUM',
-              onPressed: () {
+              onPressed: () async {
                 if (_planActual != 'PREMIUM') {
-                  Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const PagoSuscripcionPage(
@@ -104,13 +116,24 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
                       ),
                     ),
                   );
+
+                  if (!mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => result == null
+                          ? const PagoFallidoPage()
+                          : const PagoExitosoPage(),
+                    ),
+                  );
                 }
               },
             ),
 
             const SizedBox(height: 16),
 
-            // 🟧 Advance
+            // ------------------ ADVANCE ------------------
             PlanCard(
               title: 'ADVANCE',
               price: '\$14.990 / mes',
@@ -126,9 +149,9 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
               unavailable: const [],
               buttonText: 'Obtener Advance',
               isCurrentPlan: _planActual == 'ADVANCE',
-              onPressed: () {
+              onPressed: () async {
                 if (_planActual != 'ADVANCE') {
-                  Navigator.push(
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) => const PagoSuscripcionPage(
@@ -136,6 +159,17 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
                         precio: '\$14.990 / mes',
                         color: Color(0xFFE65100),
                       ),
+                    ),
+                  );
+
+                  if (!mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => result == null
+                          ? const PagoFallidoPage()
+                          : const PagoExitosoPage(),
                     ),
                   );
                 }
@@ -149,7 +183,7 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
 }
 
 // ==========================================================
-// 🔹 COMPONENTE DE CADA PLAN
+// 🔹 COMPONENTE CARD
 // ==========================================================
 class PlanCard extends StatelessWidget {
   final String title;
@@ -181,7 +215,6 @@ class PlanCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // HEADER
           Container(
             decoration: BoxDecoration(
               color: color,
@@ -212,49 +245,29 @@ class PlanCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // BENEFICIOS
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ...benefits.map(
-                  (b) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
+                ...benefits.map((b) => Row(
                       children: [
-                        const Icon(Icons.check_circle,
-                            color: Colors.green, size: 20),
+                        const Icon(Icons.check_circle, color: Colors.green),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(b)),
+                      ],
+                    )),
+                ...unavailable.map((b) => Row(
+                      children: [
+                        const Icon(Icons.cancel, color: Colors.red),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text(b, style: const TextStyle(fontSize: 14)),
+                          child: Text(b,
+                              style: const TextStyle(color: Colors.grey)),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-                ...unavailable.map(
-                  (b) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.cancel, color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            b,
-                            style: const TextStyle(
-                                fontSize: 14, color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                    )),
                 const SizedBox(height: 16),
-
-                // BOTÓN / ETIQUETA
                 isCurrentPlan
                     ? Container(
                         height: 50,
@@ -266,9 +279,7 @@ class PlanCard extends StatelessWidget {
                         child: Text(
                           'Plan actual',
                           style: GoogleFonts.poppins(
-                            color: Colors.black87,
                             fontWeight: FontWeight.w600,
-                            fontSize: 15,
                           ),
                         ),
                       )
@@ -286,7 +297,6 @@ class PlanCard extends StatelessWidget {
                           style: GoogleFonts.poppins(
                             color: Colors.white,
                             fontWeight: FontWeight.w600,
-                            fontSize: 15,
                           ),
                         ),
                       ),

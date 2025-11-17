@@ -1,8 +1,8 @@
 // ===============================================================
-// 🔹 AUTH SERVICE – SmartRent+ (versión final corregida)
+// 🔹 AUTH SERVICE – SmartRent+ (versión final corregida COMPLETA)
 // ---------------------------------------------------------------
-// - Mantiene compatibilidad completa con tu backend actual
-// - Guarda correctamente userId, token y tipoCuenta
+// - Mantiene compatibilidad con tu backend actual
+// - Guarda correctamente userId, token, nombre, email, avatar y rol
 // - Incluye logs detallados para depuración
 // ===============================================================
 
@@ -32,10 +32,12 @@ class AuthService {
     final h = {'Content-Type': 'application/json', ...?headers};
     final res = await http.post(url, headers: h, body: jsonEncode(body));
     final obj = res.body.isNotEmpty ? jsonDecode(res.body) : null;
+
     if (kDebugMode) {
       debugPrint('📤 POST $url');
       debugPrint('📩 (${res.statusCode}) $obj');
     }
+
     return {
       'status': res.statusCode,
       'ok': res.statusCode >= 200 && res.statusCode < 300,
@@ -74,43 +76,62 @@ class AuthService {
       final token = (data?['access_token'] ?? data?['token'] ?? '') as String;
       final user = (data?['user'] ?? data?['data']?['user'] ?? {})
           as Map<String, dynamic>;
+
       if (token.isEmpty || user.isEmpty) return false;
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', token);
 
-      // ✅ CORREGIDO: se asegura de guardar siempre el ID del usuario
+      // ============================================================
+      // 🔵 GUARDAR USER ID
+      // ============================================================
       final dynamic userId = user['id'] ?? user['userId'] ?? user['uid'];
       if (userId != null) {
         await prefs.setInt('userId', int.tryParse(userId.toString()) ?? 0);
         if (kDebugMode) debugPrint('🧩 userId guardado: $userId');
       } else {
-        debugPrint('⚠️ userId no encontrado en la respuesta del backend');
+        debugPrint('⚠️ userId no encontrado en backend');
       }
 
-      // ✅ Guarda el tipo de cuenta
+      // ============================================================
+      // 🔵 GUARDAR DATOS QUE FALTABAN (NOMBRE, EMAIL, AVATAR, ROL)
+      // ============================================================
+      await prefs.setString(
+        'userName',
+        user['nombre']?.toString() ?? user['name']?.toString() ?? 'Usuario',
+      );
+
+      await prefs.setString(
+        'userEmail',
+        user['correo']?.toString() ?? user['email']?.toString() ?? '',
+      );
+
+      await prefs.setString(
+        'userAvatar',
+        user['avatar']?.toString() ?? '',
+      );
+
       await prefs.setString(
         'userRole',
         (user['tipoCuenta'] ?? user['role'] ?? 'Usuario').toString(),
       );
 
-      if (kDebugMode) {
-        debugPrint('✅ Token guardado correctamente');
-        debugPrint('👤 Usuario logueado: ${user['nombre'] ?? user['email']}');
-      }
+      debugPrint('✅ Token y datos guardados correctamente');
+      debugPrint('👤 Usuario: ${user['nombre'] ?? user['email']}');
 
       return true;
     }
 
+    // ERRORES
     if (status == 404) {
       debugPrint(
-        '❌ 404: Revisa que el front use ${ApiConstants.apiPrefix}/auth/login',
-      );
+          '❌ 404: Revisa tu ruta → ${ApiConstants.apiPrefix}/auth/login');
     } else if (status == 401 || status == 400) {
       debugPrint('❌ Credenciales inválidas.');
     } else {
       debugPrint('❌ Error $status: $data');
     }
+
     return false;
   }
 
@@ -214,6 +235,7 @@ class AuthService {
 
     final ok = last!['ok'] == true;
     if (ok) return (true, 'Contraseña actualizada');
+
     final msg = (last['body']?['message']?.toString() ?? 'Error al actualizar');
     return (false, msg);
   }
@@ -224,18 +246,31 @@ class AuthService {
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
-    if (kDebugMode) debugPrint('👋 Sesión cerrada (prefs limpiadas).');
+    debugPrint('👋 Sesión cerrada (prefs limpiadas).');
   }
 
   // ============================================================
-  // USER LOCAL
+  // USER LOCAL – CORREGIDO
   // ============================================================
   static Future<Map<String, dynamic>?> getCurrentUser() async {
     final prefs = await SharedPreferences.getInstance();
+
     final id = prefs.getInt('userId');
     final role = prefs.getString('userRole');
     final token = prefs.getString('token');
+    final name = prefs.getString('userName');
+    final email = prefs.getString('userEmail');
+    final avatar = prefs.getString('userAvatar');
+
     if (id == null || token == null) return null;
-    return {'id': id, 'role': role, 'token': token};
+
+    return {
+      'id': id,
+      'role': role,
+      'token': token,
+      'nombre': name,
+      'email': email,
+      'avatar': avatar,
+    };
   }
 }

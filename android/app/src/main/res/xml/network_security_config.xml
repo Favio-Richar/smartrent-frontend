@@ -1,8 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-  <!-- Permite HTTP plano hacia tu backend local en emulador -->
-  <domain-config cleartextTrafficPermitted="true">
-    <domain includeSubdomains="true">10.0.2.2</domain>
-    <domain includeSubdomains="true">localhost</domain>
-  </domain-config>
+
+    <!-- Backend local -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+
+    <!-- 🔥 Permitir WebPay para evitar bloqueos CSP -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">transbank.cl</domain>
+        <domain includeSubdomains="true">webpay3gint.transbank.cl</domain>
+    </domain-config>
+
 </network-security-config>

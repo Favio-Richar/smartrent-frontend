@@ -1,11 +1,12 @@
 // ===============================================================
-// 🔹 DASHBOARD WIDGETS - SMARTRENT+ (versión corregida y optimizada)
+// 🔹 DASHBOARD WIDGETS - SMARTRENT+ (VERSIÓN PROFESIONAL PREMIUM FINAL)
 // ===============================================================
 
 import 'package:flutter/material.dart';
+import 'package:smartrent_plus/routes/app_routes.dart';
 
 // ---------------------------------------------------------------
-// 🔍 Buscador Global
+// 🔍 BUSCADOR GLOBAL
 // ---------------------------------------------------------------
 class SearchBarWidget extends StatelessWidget {
   final Function(String) onSearch;
@@ -32,7 +33,7 @@ class SearchBarWidget extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------
-// 🏘️ Carruseles visuales
+// 🏘️ CARRUSEL DE PROPIEDADES
 // ---------------------------------------------------------------
 class PropertyCarousel extends StatelessWidget {
   final List<dynamic> listado;
@@ -48,26 +49,21 @@ class PropertyCarousel extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 230,
+      height: 360,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: listado.length,
         itemBuilder: (context, i) {
-          final item = listado[i];
-          return _CardItem(
-            image: item['image_url'] ??
-                'https://cdn-icons-png.flaticon.com/512/869/869636.png',
-            title: item['title'] ?? 'Propiedad',
-            subtitle: item['price'] != null
-                ? '\$${item['price']} CLP'
-                : 'Ver detalle',
-          );
+          return PropertyCardPro(data: listado[i]);
         },
       ),
     );
   }
 }
 
+// ---------------------------------------------------------------
+// 💼 CARRUSEL DE EMPLEOS — usa mismo card PRO
+// ---------------------------------------------------------------
 class JobsCarousel extends StatelessWidget {
   final List<dynamic> listado;
   const JobsCarousel({super.key, required this.listado});
@@ -82,87 +78,247 @@ class JobsCarousel extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 230,
+      height: 360,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         itemCount: listado.length,
         itemBuilder: (context, i) {
-          final item = listado[i];
-          return _CardItem(
-            image: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
-            title: item['title'] ?? 'Empleo',
-            subtitle: item['category'] ?? 'General',
-          );
+          return PropertyCardPro(data: listado[i]);
         },
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------
-// 🪧 Card genérica reutilizable
-// ---------------------------------------------------------------
-class _CardItem extends StatelessWidget {
-  final String image;
-  final String title;
-  final String subtitle;
+// ===============================================================
+// ⭐ CARD PROFESIONAL – MEGA FINAL (Tasty / Airbnb / Marketplace)
+// ===============================================================
+class PropertyCardPro extends StatefulWidget {
+  final Map<String, dynamic> data;
 
-  const _CardItem({
-    required this.image,
-    required this.title,
-    required this.subtitle,
-  });
+  const PropertyCardPro({super.key, required this.data});
+
+  @override
+  State<PropertyCardPro> createState() => _PropertyCardProState();
+}
+
+class _PropertyCardProState extends State<PropertyCardPro> {
+  bool favorito = false;
+  int userRating = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    favorito = widget.data["favorito"] ?? false;
+    userRating = (widget.data["rating"] ?? 4.5).round();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final d = widget.data;
+
+    final imagen = d["imagen"] ??
+        d["image_url"] ??
+        "https://cdn-icons-png.flaticon.com/512/869/869636.png";
+
+    final titulo = d["titulo"] ?? d["title"] ?? "Sin título";
+    final precio = d["precio"]?.toString() ?? d["price"]?.toString() ?? "0";
+
+    final comentarios = d["comentarios"]?.length ?? 0;
+
+    final usuario = d["usuario"] ?? {};
+    final userNombre = usuario["nombre"] ?? "Usuario";
+    final userFoto = usuario["foto"] ??
+        "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
+
     return Container(
-      width: 180,
-      margin: const EdgeInsets.only(right: 12),
+      width: 230,
+      margin: const EdgeInsets.only(right: 18),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black12.withValues(alpha: 0.1),
-            blurRadius: 8,
+            color: Colors.black12.withOpacity(0.10),
+            blurRadius: 10,
             offset: const Offset(0, 4),
-          ),
+          )
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-            child: Image.network(
-              image,
-              height: 130,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
+          // ---------------- FOTO ----------------
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(22),
+                ),
+                child: Image.network(
+                  imagen,
+                  height: 170,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+
+              // ❤️ FAVORITO
+              Positioned(
+                top: 10,
+                right: 10,
+                child: GestureDetector(
+                  onTap: () => setState(() => favorito = !favorito),
+                  child: AnimatedScale(
+                    scale: favorito ? 1.3 : 1.0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      favorito ? Icons.favorite : Icons.favorite_border,
+                      size: 30,
+                      color: Colors.redAccent,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 10),
+
+          // ---------------- TITULO ----------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Text(
+              titulo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+
+          // ---------------- PRECIO ----------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: Text(
+              "\$$precio CLP / mes",
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Colors.indigo,
+              ),
+            ),
+          ),
+
+          // ---------------- CALIFICACIÓN (interactiva) ----------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: List.generate(
+                5,
+                (i) => GestureDetector(
+                  onTap: () => setState(() => userRating = i + 1),
+                  child: Icon(
+                    Icons.star,
+                    size: 22,
+                    color:
+                        (i < userRating) ? Colors.amber : Colors.grey.shade400,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // ---------------- COMENTARIOS ----------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: GestureDetector(
+              onTap: () => Navigator.pushNamed(
+                context,
+                AppRoutes.comentar,
+                arguments: {
+                  "id": d["id"],
+                  "titulo": titulo,
+                  "imagen": imagen,
+                  "userFoto": userFoto,
+                  "userNombre": userNombre,
+                },
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.chat_bubble_outline,
+                      size: 18, color: Colors.blueGrey),
+                  const SizedBox(width: 6),
+                  Text(
+                    "$comentarios comentarios",
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.blueGrey.shade700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // ---------------- REACCIONES PRO ----------------
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(Icons.thumb_up_alt_outlined,
+                      size: 22, color: Colors.blueGrey.shade600),
+                  Icon(Icons.favorite_border,
+                      size: 22, color: Colors.redAccent),
+                  Icon(Icons.emoji_emotions_outlined,
+                      size: 22, color: Colors.amber.shade800),
+                  Icon(Icons.local_fire_department,
+                      size: 22, color: Colors.deepOrange),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ---------------- USUARIO ----------------
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundImage: NetworkImage(userFoto),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    userNombre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
-          ),
+          )
         ],
       ),
     );
@@ -170,7 +326,7 @@ class _CardItem extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------
-// 🚀 Accesos rápidos según tipo de usuario
+// 🚀 ACCESOS RÁPIDOS (igual)
 // ---------------------------------------------------------------
 class UserQuickActions extends StatelessWidget {
   const UserQuickActions({super.key});
@@ -183,11 +339,7 @@ class UserQuickActions extends StatelessWidget {
       alignment: WrapAlignment.center,
       children: [
         _quickButton(
-          context,
-          Icons.house_rounded,
-          'Ver arriendos',
-          '/arriendos',
-        ),
+            context, Icons.house_rounded, 'Ver arriendos', '/arriendos'),
         _quickButton(context, Icons.sell, 'Ver ventas', '/ventas'),
         _quickButton(context, Icons.work_outline, 'Empleos', '/empleos'),
         _quickButton(context, Icons.favorite, 'Favoritos', '/favoritos'),
@@ -206,30 +358,21 @@ class CompanyQuickActions extends StatelessWidget {
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
+        _quickButton(context, Icons.add_business, 'Publicar arriendo',
+            '/arriendos/crear'),
         _quickButton(
-          context,
-          Icons.add_business,
-          'Publicar arriendo',
-          '/arriendos/crear',
-        ),
-        _quickButton(
-          context,
-          Icons.storefront,
-          'Publicar venta',
-          '/ventas/crear',
-        ),
+            context, Icons.storefront, 'Publicar venta', '/ventas/crear'),
         _quickButton(context, Icons.work, 'Publicar empleo', '/empleos/crear'),
         _quickButton(
-          context,
-          Icons.analytics,
-          'Ver métricas',
-          '/empresa/panel',
-        ),
+            context, Icons.analytics, 'Ver métricas', '/empresa/panel'),
       ],
     );
   }
 }
 
+// ---------------------------------------------------------------
+// ✔ BOTÓN UTILITARIO
+// ---------------------------------------------------------------
 Widget _quickButton(
   BuildContext context,
   IconData icon,
@@ -237,17 +380,21 @@ Widget _quickButton(
   String route,
 ) {
   return ElevatedButton.icon(
-    style: ElevatedButton.styleFrom(
-      backgroundColor: Colors.blueAccent,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-    ),
-    // ✅ Aquí se corrige el error de tipo
     onPressed: () => Navigator.pushNamed(context, route),
     icon: Icon(icon, color: Colors.white, size: 20),
     label: Text(
       label,
-      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+    style: ElevatedButton.styleFrom(
+      backgroundColor: Colors.blueAccent,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
     ),
   );
 }

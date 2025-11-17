@@ -1,5 +1,5 @@
 // ===============================================================
-// 🔹 MAIN - SmartRent+ (Versión final sin errores)
+// 🔹 MAIN - SmartRent+ (Versión final sin errores y 100% funcional)
 // ===============================================================
 
 import 'package:flutter/material.dart';
@@ -12,8 +12,12 @@ import 'package:provider/provider.dart';
 import 'package:smartrent_plus/core/theme/app_theme.dart';
 import 'package:smartrent_plus/routes/app_routes.dart';
 
-// 🧩 Providers y servicios
+// 🧩 Providers
 import 'package:smartrent_plus/data/providers/soporte_provider.dart';
+import 'package:smartrent_plus/data/providers/subscription_provider.dart';
+import 'package:smartrent_plus/data/providers/company_provider.dart';
+
+// 🧩 Servicios
 import 'package:smartrent_plus/data/services/api_service.dart';
 import 'package:smartrent_plus/data/services/soporte_service.dart';
 
@@ -37,8 +41,19 @@ class SmartRentApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // 🧩 Soporte Provider
         ChangeNotifierProvider(
           create: (_) => SoporteProvider(SoporteService(ApiService())),
+        ),
+
+        // 💳 SUSCRIPCIONES
+        ChangeNotifierProvider(
+          create: (_) => SubscriptionProvider(),
+        ),
+
+        // 🟦 ⭐ AGREGADO — COMPANY PROVIDER (obligatorio)
+        ChangeNotifierProvider(
+          create: (_) => CompanyProvider(),
         ),
       ],
       child: MaterialApp(
@@ -59,6 +74,7 @@ class SmartRentApp extends StatelessWidget {
         routes: AppRoutes.routes,
         onUnknownRoute: (settings) {
           return MaterialPageRoute(
+            settings: settings,
             builder: (context) => Scaffold(
               backgroundColor: Colors.red.shade50,
               appBar: AppBar(
@@ -109,7 +125,6 @@ class SmartRentApp extends StatelessWidget {
                 ),
               ),
             ),
-            settings: settings,
           );
         },
       ),

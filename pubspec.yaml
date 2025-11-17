@@ -21,6 +21,7 @@ dependencies:
   shared_preferences: ^2.2.3
   cached_network_image: ^3.3.1
   image_picker: ^1.0.7
+  dio: ^5.4.0
   path_provider: ^2.1.4
   share_plus: ^7.2.2
   file_picker: ^8.1.2
@@ -56,6 +57,9 @@ dependencies:
   webview_flutter: ^4.4.2       # ✅ Permite abrir la URL de pago dentro de la app
   flutter_inappwebview: ^6.0.0  # ✅ Alternativa avanzada para control total del navegador interno
 
+  app_links: ^3.5.0
+
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -69,3 +73,9 @@ flutter:
     - assets/animations/
     - assets/images/
     - assets/images/transbank_logo.png
+    - assets/images/facebook_icon.png
+    - assets/images/instagram_icon.png
+    - assets/images/linkedin_icon.png
+    - assets/images/profile_placeholder.png
+    - assets/images/web_icon.png
+    - assets/images/whatsapp_icon.png

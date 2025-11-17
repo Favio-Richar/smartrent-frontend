@@ -4,6 +4,7 @@
 // ✅ Llamada directa
 // ✅ WhatsApp externo
 // ✅ Envío de correo compatible con Android 13/14 (forzado a Gmail)
+// ✅ Corregido: uso seguro de BuildContext y eliminación de warnings
 // ===============================================================
 
 import 'package:flutter/material.dart';
@@ -27,7 +28,9 @@ class ContactoSoportePage extends StatelessWidget {
   // ---------------------------------------------------------------
   Future<void> _llamar(BuildContext context) async {
     final uri = Uri(scheme: 'tel', path: _telefonoRaw);
-    if (await canLaunchUrl(uri)) {
+    final canLaunch = await canLaunchUrl(uri);
+    if (!context.mounted) return;
+    if (canLaunch) {
       await launchUrl(uri);
     } else {
       _toast(context, 'No se pudo iniciar la llamada.');
@@ -41,7 +44,9 @@ class ContactoSoportePage extends StatelessWidget {
     final msg = 'Hola, necesito ayuda con SmartRent+. ¿Me pueden asistir?';
     final uri = Uri.parse(
         'https://wa.me/$_telefonoRaw?text=${Uri.encodeComponent(msg)}');
-    if (await canLaunchUrl(uri)) {
+    final canLaunch = await canLaunchUrl(uri);
+    if (!context.mounted) return;
+    if (canLaunch) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
       _toast(context, 'No se pudo abrir WhatsApp.');
@@ -55,10 +60,9 @@ class ContactoSoportePage extends StatelessWidget {
     final subject = Uri.encodeComponent('Asistencia SmartRent+');
     final body = Uri.encodeComponent(
         'Hola equipo de soporte,\n\nNecesito ayuda con:\n\nDetalles:\n\nGracias.\n');
-    final correo = _correo;
+    const correo = _correo;
 
     try {
-      // Intento abrir directamente Gmail
       final gmailIntent = Uri(
         scheme: 'mailto',
         path: correo,
@@ -70,17 +74,20 @@ class ContactoSoportePage extends StatelessWidget {
         mode: LaunchMode.externalApplication,
       );
 
+      if (!context.mounted) return;
       if (!launched) {
-        // Fallback → intenta con mailto normal
         final mailtoUri =
             Uri.parse('mailto:$correo?subject=$subject&body=$body');
-        if (await canLaunchUrl(mailtoUri)) {
+        final canLaunchMail = await canLaunchUrl(mailtoUri);
+        if (!context.mounted) return;
+        if (canLaunchMail) {
           await launchUrl(mailtoUri);
         } else {
           _toast(context, 'No se pudo abrir Gmail ni el cliente de correo.');
         }
       }
     } catch (e) {
+      if (!context.mounted) return;
       _toast(context, 'Error al abrir correo: $e');
     }
   }
@@ -122,7 +129,8 @@ class ContactoSoportePage extends StatelessWidget {
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withOpacity(.12),
+                        color: theme.colorScheme.primary
+                            .withAlpha(30), // ✅ reemplazo moderno
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -233,7 +241,7 @@ class _ContactOption extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 8),
       elevation: 2,
-      shadowColor: color.withOpacity(0.2),
+      shadowColor: color.withAlpha(40), // ✅ sin deprecated
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -246,7 +254,7 @@ class _ContactOption extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(.1),
+                  color: color.withAlpha(25), // ✅ reemplazo moderno
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: faIcon != null

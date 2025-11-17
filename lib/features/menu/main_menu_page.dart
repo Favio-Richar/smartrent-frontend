@@ -189,6 +189,12 @@ class _MainMenuPageState extends State<MainMenuPage> {
   // ===========================================================
   // 🔹 SUBMENÚ: EMPRESAS
   // ===========================================================
+// ===========================================================
+// 🔹 SUBMENÚ: EMPRESAS
+// ===========================================================
+// ===========================================================
+// 🔹 SUBMENÚ: EMPRESAS
+// ===========================================================
   Widget _submenuEmpresas() => _expansionMenu(
         icon: Icons.apartment_outlined,
         title: 'Empresas',
@@ -197,6 +203,17 @@ class _MainMenuPageState extends State<MainMenuPage> {
           _miniItem(Icons.grid_view_outlined, 'Catálogo', () => _selectTab(3)),
           _miniItem(Icons.app_registration_outlined, 'Registro de empresa',
               () => Navigator.pushNamed(context, AppRoutes.empresasRegistro)),
+
+          // ⭐ AGREGADO (ESTO ES LO NUEVO)
+          _miniItem(
+            Icons.account_circle_outlined,
+            'Perfil empresa',
+            () => Navigator.pushNamed(
+              context,
+              AppRoutes.perfilEmpresa,
+              arguments: 1, // TEMPORAL — luego pondremos ID REAL
+            ),
+          ),
         ],
       );
 
